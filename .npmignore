@@ -1,0 +1,14 @@
+# Ignore node_modules in the root directory
+/node_modules
+
+# Ignore node_modules in all subdirectories
+**/node_modules/**
+
+**/.github/**
+
+/src
+/coverage
+
+dist/tsconfig.build.tsbuildinfo
+sonar-project.properties
+

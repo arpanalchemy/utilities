@@ -30,3 +30,4 @@ export * from './utils/time/timeUtils.service';
 export * from './utils/redisCache/redis.generic.helper';
 export * from './utils/razorpay/razorpay.helper';
 export * from './utils/razorpay/razorpay.dto';
+export * from './utils/cognitoService/cognito.service';

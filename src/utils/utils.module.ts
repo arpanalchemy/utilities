@@ -11,6 +11,7 @@ import { S3Service } from "../utils/s3Service/s3.service";
 import { DateCalculationUtil } from "./dateCalculation/dateCalculation.util.service";
 import { RedisGenericHelper } from "./redisCache/redis.generic.helper";
 import { RazorpayHelper } from "./razorpay/razorpay.helper";
+import { CognitoService } from './cognitoService/cognito/cognito.service
 
 @Module({
   providers: [
@@ -26,6 +27,7 @@ import { RazorpayHelper } from "./razorpay/razorpay.helper";
     DateCalculationUtil,
     RedisGenericHelper,
     RazorpayHelper,
+    CognitoService,
   ],
   exports: [
     SecretsService,

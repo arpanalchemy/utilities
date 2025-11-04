@@ -46,22 +46,35 @@ export class CognitoService {
   /**
    * Fetch Cognito credentials (from Secrets Manager or env)
    */
-  private async getCognitoConfig() {
-    const userPoolId =
-      (await this.secretService.getSecret('cognito', 'user_pool_id')) ||
-      process.env.AWS_COGNITO_USER_POOL_ID;
-    const clientId =
-      (await this.secretService.getSecret('cognito', 'client_id')) ||
-      process.env.AWS_COGNITO_CLIENT_ID;
-    const clientSecret =
-      (await this.secretService.getSecret('cognito', 'client_secret')) ||
-      process.env.AWS_COGNITO_CLIENT_SECRET;
+/**
+ * Fetch Cognito credentials (from Secrets Manager if available, else .env)
+ */
+private async getCognitoConfig() {
+  let userPoolId: string | undefined;
+  let clientId: string | undefined;
+  let clientSecret: string | undefined;
 
-    if (!userPoolId || !clientId) {
-      throw new InternalServerErrorException('Cognito configuration missing');
-    }
-    return { userPoolId, clientId, clientSecret };
+  try {
+    // Try secrets first
+    userPoolId = await this.secretService.getSecret('cognito', 'user_pool_id');
+    clientId = await this.secretService.getSecret('cognito', 'client_id');
+    clientSecret = await this.secretService.getSecret('cognito', 'client_secret');
+  } catch (err) {
+    this.logger.warn('⚠️ SecretsService unavailable, falling back to .env');
   }
+
+  // Fallback to env vars if secrets not found
+  userPoolId = userPoolId || process.env.AWS_COGNITO_USER_POOL_ID;
+  clientId = clientId || process.env.AWS_COGNITO_CLIENT_ID;
+  clientSecret = clientSecret || process.env.AWS_COGNITO_CLIENT_SECRET;
+
+  if (!userPoolId || !clientId) {
+    throw new InternalServerErrorException('Cognito configuration missing');
+  }
+
+  return { userPoolId, clientId, clientSecret };
+}
+
 
   /**
    * Returns a new Cognito Identity Provider client

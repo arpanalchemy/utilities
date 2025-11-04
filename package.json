@@ -2,8 +2,10 @@
 "name": "alchemy-utilities",
   "version": "0.0.1",
     "description": "Alchemy Utilities",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+"main": "dist/index.js",
+"types": "dist/index.d.ts",
+
+
   "publishConfig": {
     "access": "public"
   },

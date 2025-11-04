@@ -27,10 +27,10 @@ import { createHmac } from 'crypto';
 
 @Injectable()
 export class CognitoService {
-  @Inject()
-  private readonly secretService: SecretsService;
 
   private readonly logger = new Logger(CognitoService.name);
+
+  constructor(private readonly secretService: SecretsService) {}
 
   /**
    * AWS SDK Client configuration

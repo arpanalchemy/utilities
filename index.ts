@@ -31,3 +31,4 @@ export * from './src/utils/redisCache/redis.generic.helper';
 export * from './src/utils/razorpay/razorpay.helper';
 export * from './src/utils/razorpay/razorpay.dto';
 export * from './src/utils/cognitoService/cognito.service';
+export * from './src/utils/cognitoService/cognito.filter';

@@ -4,6 +4,10 @@ import {
   InternalServerErrorException,
   BadRequestException,
   UnauthorizedException,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import {
   CognitoIdentityProviderClient,
@@ -26,11 +30,16 @@ import {
 import { SecretsService } from '../secretsService/secrets.service';
 import { createHmac } from 'crypto';
 
+/**
+ * All-in-One Cognito Service with built-in clean error handling
+ * No external filters or configuration needed - just import and use!
+ */
 @Injectable()
 export class CognitoService {
   private readonly logger = new Logger(CognitoService.name);
 
   constructor(private secretService?: SecretsService) {}
+
   /**
    * AWS SDK Client configuration
    */
@@ -50,12 +59,14 @@ export class CognitoService {
     let clientId: string | undefined;
     let clientSecret: string | undefined;
 
-    try {
-      userPoolId = await this.secretService.getSecret('cognito', 'user_pool_id');
-      clientId = await this.secretService.getSecret('cognito', 'client_id');
-      clientSecret = await this.secretService.getSecret('cognito', 'client_secret');
-    } catch (err) {
-      this.logger.warn('⚠️ SecretsService unavailable, falling back to .env');
+    if (this.secretService) {
+      try {
+        userPoolId = await this.secretService.getSecret('cognito', 'user_pool_id');
+        clientId = await this.secretService.getSecret('cognito', 'client_id');
+        clientSecret = await this.secretService.getSecret('cognito', 'client_secret');
+      } catch (err) {
+        // Silent fallback to env vars
+      }
     }
 
     userPoolId = userPoolId || process.env.AWS_COGNITO_USER_POOL_ID;
@@ -88,79 +99,102 @@ export class CognitoService {
   }
 
   /**
-   * Centralized error handler for AWS Cognito exceptions
+   * Sanitize email for logging (masks personal info)
    */
-  private handleCognitoError(error: any, context: string): never {
-    const errorName = error.name || 'UnknownError';
-    
-    // Log the error concisely
-    this.logger.error(`${context} failed: ${errorName} - ${error.message}`);
-
-    // Map AWS errors to user-friendly messages
-    const errorMap: Record<string, { message: string; exception: any }> = {
-      CodeMismatchException: {
-        message: 'Invalid verification code provided',
-        exception: BadRequestException,
-      },
-      ExpiredCodeException: {
-        message: 'Verification code has expired',
-        exception: BadRequestException,
-      },
-      UserNotFoundException: {
-        message: 'User not found',
-        exception: BadRequestException,
-      },
-      NotAuthorizedException: {
-        message: 'Invalid credentials or unauthorized access',
-        exception: UnauthorizedException,
-      },
-      UsernameExistsException: {
-        message: 'User already exists',
-        exception: BadRequestException,
-      },
-      InvalidPasswordException: {
-        message: 'Password does not meet security requirements',
-        exception: BadRequestException,
-      },
-      InvalidParameterException: {
-        message: 'Invalid parameters provided',
-        exception: BadRequestException,
-      },
-      TooManyRequestsException: {
-        message: 'Too many requests, please try again later',
-        exception: BadRequestException,
-      },
-      UserNotConfirmedException: {
-        message: 'User email not confirmed',
-        exception: BadRequestException,
-      },
-      LimitExceededException: {
-        message: 'Request limit exceeded',
-        exception: BadRequestException,
-      },
-    };
-
-    const errorConfig = errorMap[errorName];
-    
-    if (errorConfig) {
-      throw new errorConfig.exception(errorConfig.message);
-    }
-
-    // Fallback for unknown errors
-    throw new InternalServerErrorException(
-      error.message || 'An unexpected error occurred',
-    );
+  private sanitize(email: string): string {
+    if (!email || !email.includes('@')) return '***';
+    const [local, domain] = email.split('@');
+    return `${local.charAt(0)}***@${domain}`;
   }
 
-  // ---------------------------------------------------------------------------
+  /**
+   * 🔥 THE MAGIC METHOD - Wraps ALL Cognito calls with clean error handling
+   * This eliminates the need for external filters or try-catch blocks
+   */
+  private async execute<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error: any) {
+      const errorName = error.name || 'UnknownError';
+
+      // Single-line error log (no stack trace)
+      this.logger.error(`${operationName} failed: ${errorName}`);
+
+      // Map AWS errors to clean HTTP exceptions
+      const errorMap: Record<string, { exception: any; message: string }> = {
+        CodeMismatchException: {
+          exception: BadRequestException,
+          message: 'Invalid verification code provided',
+        },
+        ExpiredCodeException: {
+          exception: BadRequestException,
+          message: 'Verification code has expired, please request a new one',
+        },
+        UserNotFoundException: {
+          exception: NotFoundException,
+          message: 'User not found',
+        },
+        NotAuthorizedException: {
+          exception: UnauthorizedException,
+          message: 'Invalid credentials or unauthorized access',
+        },
+        UsernameExistsException: {
+          exception: ConflictException,
+          message: 'User already exists',
+        },
+        InvalidPasswordException: {
+          exception: BadRequestException,
+          message: 'Password does not meet security requirements',
+        },
+        InvalidParameterException: {
+          exception: BadRequestException,
+          message: 'Invalid parameters provided',
+        },
+        TooManyRequestsException: {
+          exception: HttpException,
+          message: 'Too many requests, please try again later',
+        },
+        UserNotConfirmedException: {
+          exception: BadRequestException,
+          message: 'Please verify your email before logging in',
+        },
+        LimitExceededException: {
+          exception: HttpException,
+          message: 'Request limit exceeded',
+        },
+        TooManyFailedAttemptsException: {
+          exception: HttpException,
+          message: 'Too many failed attempts, account temporarily locked',
+        },
+      };
+
+      const errorConfig = errorMap[errorName];
+
+      if (errorConfig) {
+        // Throw clean exception with user-friendly message
+        if (errorConfig.exception === HttpException) {
+          throw new HttpException(errorConfig.message, HttpStatus.TOO_MANY_REQUESTS);
+        }
+        throw new errorConfig.exception(errorConfig.message);
+      }
+
+      // Unknown error - hide internal details
+      throw new InternalServerErrorException('An unexpected error occurred');
+    }
+  }
+
+  // ===========================================================================
   // 🧩 AUTHENTICATION & USER MANAGEMENT
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
   /**
    * User Sign-Up (triggers email verification)
    */
   async signUp(email: string, password: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { clientId } = await this.getCognitoConfig();
       const client = this.getClient();
       const secretHash = await this.computeSecretHash(email);
@@ -173,18 +207,17 @@ export class CognitoService {
         ...(secretHash ? { SecretHash: secretHash } : {}),
       });
 
-      this.logger.log(`📩 Sign-up initiated for ${email}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Sign-up for ${email}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`Sign-up initiated for ${this.sanitize(email)}`);
+      return result;
+    }, 'Sign-up');
   }
 
   /**
-   * Confirm user email via code (from Cognito email)
+   * Confirm user email via code
    */
   async confirmSignUp(username: string, code: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { clientId } = await this.getCognitoConfig();
       const client = this.getClient();
       const secretHash = await this.computeSecretHash(username);
@@ -196,18 +229,17 @@ export class CognitoService {
         ...(secretHash ? { SecretHash: secretHash } : {}),
       });
 
-      this.logger.log(`✅ Email confirmed for ${username}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Confirm sign-up for ${username}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`Email confirmed for ${this.sanitize(username)}`);
+      return result;
+    }, 'Confirm sign-up');
   }
 
   /**
    * Admin Confirm Sign-Up (bypass email verification)
    */
   async adminConfirmSignUp(username: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { userPoolId } = await this.getCognitoConfig();
       const client = this.getClient();
 
@@ -216,18 +248,17 @@ export class CognitoService {
         UserPoolId: userPoolId,
       });
 
-      this.logger.log(`🛠️ Admin confirmed signup for ${username}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Admin confirm sign-up for ${username}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`Admin confirmed ${this.sanitize(username)}`);
+      return result;
+    }, 'Admin confirm sign-up');
   }
 
   /**
-   * Admin creates user with temporary password (optionally verified)
+   * Admin creates user with temporary password
    */
   async adminCreateUser(email: string, tempPassword: string, verified = false): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { userPoolId } = await this.getCognitoConfig();
       const client = this.getClient();
 
@@ -242,18 +273,17 @@ export class CognitoService {
         UserAttributes: attributes,
       });
 
-      this.logger.log(`👑 Admin created user ${email}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Admin create user ${email}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`Admin created user ${this.sanitize(email)}`);
+      return result;
+    }, 'Admin create user');
   }
 
   /**
    * Admin sets permanent password
    */
   async setPassword(username: string, newPassword: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { userPoolId } = await this.getCognitoConfig();
       const client = this.getClient();
 
@@ -264,18 +294,17 @@ export class CognitoService {
         Permanent: true,
       });
 
-      this.logger.log(`🔐 Permanent password set for ${username}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Set password for ${username}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`Password set for ${this.sanitize(username)}`);
+      return result;
+    }, 'Set password');
   }
 
   /**
-   * Login with username/password — supports MFA
+   * Login with username/password (supports MFA)
    */
   async adminLogin(username: string, password: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { userPoolId, clientId } = await this.getCognitoConfig();
       const client = this.getClient();
       const secretHash = await this.computeSecretHash(username);
@@ -294,22 +323,20 @@ export class CognitoService {
       const response = await client.send(command);
 
       if (response.ChallengeName === 'SOFTWARE_TOKEN_MFA' || response.ChallengeName === 'SMS_MFA') {
-        this.logger.warn(`⚠️ MFA required for ${username}`);
+        this.logger.log(`MFA required for ${this.sanitize(username)}`);
         return { challenge: response.ChallengeName, session: response.Session };
       }
 
-      this.logger.log(`✅ ${username} logged in`);
+      this.logger.log(`Login successful for ${this.sanitize(username)}`);
       return response.AuthenticationResult;
-    } catch (error) {
-      this.handleCognitoError(error, `Login for ${username}`);
-    }
+    }, 'Login');
   }
 
   /**
    * Verify MFA Challenge
    */
   async verifyMFA(username: string, session: string, code: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { clientId } = await this.getCognitoConfig();
       const client = this.getClient();
 
@@ -323,33 +350,30 @@ export class CognitoService {
         },
       });
 
-      this.logger.log(`🔑 MFA verified for ${username}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Verify MFA for ${username}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`MFA verified for ${this.sanitize(username)}`);
+      return result;
+    }, 'Verify MFA');
   }
 
   /**
-   * Generate TOTP MFA secret (to show as QR)
+   * Setup MFA - Generate TOTP secret
    */
   async setupMFA(accessToken: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const client = this.getClient();
       const command = new AssociateSoftwareTokenCommand({ AccessToken: accessToken });
-      const response = await client.send(command);
-      this.logger.log(`📲 MFA secret generated`);
-      return response;
-    } catch (error) {
-      this.handleCognitoError(error, 'Setup MFA');
-    }
+      const result = await client.send(command);
+      this.logger.log('MFA secret generated');
+      return result;
+    }, 'Setup MFA');
   }
 
   /**
-   * Confirm MFA setup using code from authenticator app
+   * Confirm MFA setup with verification code
    */
   async confirmMFA(accessToken: string, code: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const client = this.getClient();
       const command = new VerifySoftwareTokenCommand({
         AccessToken: accessToken,
@@ -357,20 +381,18 @@ export class CognitoService {
         FriendlyDeviceName: 'Primary Device',
       });
 
-      const response = await client.send(command);
-      this.logger.log(`✅ MFA setup confirmed`);
-      return response;
-    } catch (error) {
-      this.handleCognitoError(error, 'Confirm MFA setup');
-    }
+      const result = await client.send(command);
+      this.logger.log('MFA setup confirmed');
+      return result;
+    }, 'Confirm MFA');
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // 🔁 TOKEN MANAGEMENT
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
   async refreshToken(refreshToken: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { clientId } = await this.getCognitoConfig();
       const client = this.getClient();
 
@@ -380,19 +402,18 @@ export class CognitoService {
         AuthParameters: { REFRESH_TOKEN: refreshToken },
       });
 
-      this.logger.log(`♻️ Refresh token used`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, 'Refresh token');
-    }
+      const result = await client.send(command);
+      this.logger.log('Token refreshed');
+      return result;
+    }, 'Refresh token');
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // 🔧 USER MAINTENANCE
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
   async forgotPassword(username: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { clientId } = await this.getCognitoConfig();
       const client = this.getClient();
       const secretHash = await this.computeSecretHash(username);
@@ -403,15 +424,14 @@ export class CognitoService {
         ...(secretHash ? { SecretHash: secretHash } : {}),
       });
 
-      this.logger.log(`🧩 Forgot password initiated for ${username}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Forgot password for ${username}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`Password reset initiated for ${this.sanitize(username)}`);
+      return result;
+    }, 'Forgot password');
   }
 
   async confirmForgotPassword(username: string, code: string, newPassword: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { clientId } = await this.getCognitoConfig();
       const client = this.getClient();
       const secretHash = await this.computeSecretHash(username);
@@ -424,15 +444,14 @@ export class CognitoService {
         ...(secretHash ? { SecretHash: secretHash } : {}),
       });
 
-      this.logger.log(`🔁 Password reset confirmed for ${username}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Confirm forgot password for ${username}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`Password reset confirmed for ${this.sanitize(username)}`);
+      return result;
+    }, 'Confirm forgot password');
   }
 
   async updateUserAttributes(username: string, attributes: Record<string, string>): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { userPoolId } = await this.getCognitoConfig();
       const client = this.getClient();
 
@@ -442,15 +461,14 @@ export class CognitoService {
         UserAttributes: Object.entries(attributes).map(([Name, Value]) => ({ Name, Value })),
       });
 
-      this.logger.log(`✏️ Attributes updated for ${username}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Update attributes for ${username}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`Attributes updated for ${this.sanitize(username)}`);
+      return result;
+    }, 'Update user attributes');
   }
 
   async getUser(username: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const { userPoolId } = await this.getCognitoConfig();
       const client = this.getClient();
 
@@ -459,21 +477,19 @@ export class CognitoService {
         Username: username,
       });
 
-      this.logger.log(`👤 Retrieved user ${username}`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, `Get user ${username}`);
-    }
+      const result = await client.send(command);
+      this.logger.log(`Retrieved user ${this.sanitize(username)}`);
+      return result;
+    }, 'Get user');
   }
 
   async globalSignOut(accessToken: string): Promise<any> {
-    try {
+    return this.execute(async () => {
       const client = this.getClient();
       const command = new GlobalSignOutCommand({ AccessToken: accessToken });
-      this.logger.log(`🚪 Global sign-out`);
-      return client.send(command);
-    } catch (error) {
-      this.handleCognitoError(error, 'Global sign-out');
-    }
+      const result = await client.send(command);
+      this.logger.log('Global sign-out');
+      return result;
+    }, 'Global sign-out');
   }
 }

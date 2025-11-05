@@ -2,12 +2,8 @@ import {
   Injectable,
   Logger,
   InternalServerErrorException,
-  BadRequestException,
-  UnauthorizedException,
   HttpException,
   HttpStatus,
-  NotFoundException,
-  ConflictException,
 } from '@nestjs/common';
 import {
   CognitoIdentityProviderClient,
@@ -29,19 +25,38 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { SecretsService } from '../secretsService/secrets.service';
 import { createHmac } from 'crypto';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 
 /**
- * All-in-One Cognito Service with built-in clean error handling
- * No external filters or configuration needed - just import and use!
+ * Production-Optimized Cognito Service
+ * - Zero external dependencies (no filters needed)
+ * - Built-in caching (config, client, secret hash)
+ * - Clean error handling (no stack traces)
+ * - Request timeouts & retries configured
+ * - Simple metrics collection
  */
 @Injectable()
 export class CognitoService {
   private readonly logger = new Logger(CognitoService.name);
 
+  // Caching for performance
+  private cognitoClient: CognitoIdentityProviderClient | null = null;
+  private configCache: { userPoolId: string; clientId: string; clientSecret?: string } | null = null;
+  private configCacheTime = 0;
+  private secretHashCache = new Map<string, string>();
+  private readonly CONFIG_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  // Simple metrics
+  private metrics = {
+    requests: 0,
+    errors: 0,
+    errorsByType: new Map<string, number>(),
+  };
+
   constructor(private secretService?: SecretsService) {}
 
   /**
-   * AWS SDK Client configuration
+   * AWS SDK Client configuration with timeouts and retries
    */
   private getAWSConfig() {
     const region = process.env.AWS_REGION;
@@ -52,23 +67,50 @@ export class CognitoService {
   }
 
   /**
-   * Fetch Cognito credentials (from Secrets Manager if available, else .env)
+   * Get or create Cognito client (singleton with connection pooling)
+   */
+  private getClient() {
+    if (!this.cognitoClient) {
+      this.cognitoClient = new CognitoIdentityProviderClient({
+        region: this.getAWSConfig().region,
+        requestHandler: new NodeHttpHandler({
+          connectionTimeout: 3000, // 3 seconds
+          socketTimeout: 5000,     // 5 seconds
+        }),
+        maxAttempts: 3, // Retry failed requests up to 3 times
+      });
+      this.logger.log('Cognito client initialized');
+    }
+    return this.cognitoClient;
+  }
+
+  /**
+   * Fetch Cognito config with 5-minute caching
    */
   private async getCognitoConfig() {
+    const now = Date.now();
+    
+    // Return cached config if still valid
+    if (this.configCache && now - this.configCacheTime < this.CONFIG_CACHE_TTL) {
+      return this.configCache;
+    }
+
     let userPoolId: string | undefined;
     let clientId: string | undefined;
     let clientSecret: string | undefined;
 
+    // Try Secrets Manager first (silent failure)
     if (this.secretService) {
       try {
         userPoolId = await this.secretService.getSecret('cognito', 'user_pool_id');
         clientId = await this.secretService.getSecret('cognito', 'client_id');
         clientSecret = await this.secretService.getSecret('cognito', 'client_secret');
-      } catch (err) {
-        // Silent fallback to env vars
+      } catch {
+        // Silent - fallback to env vars
       }
     }
 
+    // Fallback to environment variables
     userPoolId = userPoolId || process.env.AWS_COGNITO_USER_POOL_ID;
     clientId = clientId || process.env.AWS_COGNITO_CLIENT_ID;
     clientSecret = clientSecret || process.env.AWS_COGNITO_CLIENT_SECRET;
@@ -77,29 +119,45 @@ export class CognitoService {
       throw new InternalServerErrorException('Cognito configuration missing');
     }
 
-    return { userPoolId, clientId, clientSecret };
+    // Cache the configuration
+    this.configCache = { userPoolId, clientId, clientSecret };
+    this.configCacheTime = now;
+
+    return this.configCache;
   }
 
   /**
-   * Returns a new Cognito Identity Provider client
-   */
-  private getClient() {
-    return new CognitoIdentityProviderClient(this.getAWSConfig());
-  }
-
-  /**
-   * Computes Cognito secret hash (for apps with client_secret)
+   * Compute secret hash with caching
    */
   private async computeSecretHash(username: string): Promise<string | undefined> {
     const { clientId, clientSecret } = await this.getCognitoConfig();
     if (!clientSecret) return undefined;
+
+    const cacheKey = `${username}:${clientId}`;
+    
+    // Return cached hash if exists
+    if (this.secretHashCache.has(cacheKey)) {
+      return this.secretHashCache.get(cacheKey);
+    }
+
+    // Compute and cache
     const hmac = createHmac('sha256', clientSecret);
     hmac.update(username + clientId);
-    return hmac.digest('base64');
+    const hash = hmac.digest('base64');
+    
+    this.secretHashCache.set(cacheKey, hash);
+    
+    // Clear old cache entries if too large (prevent memory leak)
+    if (this.secretHashCache.size > 1000) {
+      const firstKey = this.secretHashCache.keys().next().value;
+      this.secretHashCache.delete(firstKey);
+    }
+    
+    return hash;
   }
 
   /**
-   * Sanitize email for logging (masks personal info)
+   * Sanitize email for logging (privacy-friendly)
    */
   private sanitize(email: string): string {
     if (!email || !email.includes('@')) return '***';
@@ -108,65 +166,72 @@ export class CognitoService {
   }
 
   /**
-   * 🔥 THE MAGIC METHOD - Wraps ALL Cognito calls with clean error handling
-   * This eliminates the need for external filters or try-catch blocks
+   * Execute wrapper with clean error handling and metrics
+   * NO STACK TRACES EVER
    */
   private async execute<T>(
     operation: () => Promise<T>,
     operationName: string,
   ): Promise<T> {
+    this.metrics.requests++;
+    
     try {
       return await operation();
     } catch (error: any) {
+      this.metrics.errors++;
       const errorName = error.name || 'UnknownError';
+      
+      // Track error types
+      const count = this.metrics.errorsByType.get(errorName) || 0;
+      this.metrics.errorsByType.set(errorName, count + 1);
 
-      // Single-line error log (no stack trace)
-      this.logger.error(`${operationName} failed: ${errorName}`);
+      // Minimal error log - just operation and error type
+      this.logger.error(`${operationName}: ${errorName}`);
 
-      // Map AWS errors to clean HTTP exceptions
-      const errorMap: Record<string, { exception: any; message: string }> = {
+      // Map AWS errors to HTTP exceptions
+      const errorMap: Record<string, { status: HttpStatus; message: string }> = {
         CodeMismatchException: {
-          exception: BadRequestException,
+          status: HttpStatus.BAD_REQUEST,
           message: 'Invalid verification code provided',
         },
         ExpiredCodeException: {
-          exception: BadRequestException,
+          status: HttpStatus.BAD_REQUEST,
           message: 'Verification code has expired, please request a new one',
         },
         UserNotFoundException: {
-          exception: NotFoundException,
+          status: HttpStatus.NOT_FOUND,
           message: 'User not found',
         },
         NotAuthorizedException: {
-          exception: UnauthorizedException,
+          status: HttpStatus.UNAUTHORIZED,
           message: 'Invalid credentials or unauthorized access',
         },
         UsernameExistsException: {
-          exception: ConflictException,
+          status: HttpStatus.CONFLICT,
           message: 'User already exists',
         },
         InvalidPasswordException: {
-          exception: BadRequestException,
+          status: HttpStatus.BAD_REQUEST,
           message: 'Password does not meet security requirements',
         },
         InvalidParameterException: {
-          exception: BadRequestException,
+          status: HttpStatus.BAD_REQUEST,
           message: 'Invalid parameters provided',
         },
         TooManyRequestsException: {
-          exception: HttpException,
+          status: HttpStatus.TOO_MANY_REQUESTS,
           message: 'Too many requests, please try again later',
         },
         UserNotConfirmedException: {
-          exception: BadRequestException,
+          status: HttpStatus.FORBIDDEN,
           message: 'Please verify your email before logging in',
         },
         LimitExceededException: {
-          exception: HttpException,
+          status: HttpStatus.TOO_MANY_REQUESTS,
           message: 'Request limit exceeded',
         },
         TooManyFailedAttemptsException: {
-          exception: HttpException,
+          status: HttpStatus.TOO_MANY_REQUESTS,
           message: 'Too many failed attempts, account temporarily locked',
         },
       };
@@ -174,15 +239,24 @@ export class CognitoService {
       const errorConfig = errorMap[errorName];
 
       if (errorConfig) {
-        // Throw clean exception with user-friendly message
-        if (errorConfig.exception === HttpException) {
-          throw new HttpException(errorConfig.message, HttpStatus.TOO_MANY_REQUESTS);
-        }
-        throw new errorConfig.exception(errorConfig.message);
+        const exception = new HttpException(
+          {
+            statusCode: errorConfig.status,
+            message: errorConfig.message,
+            error: HttpStatus[errorConfig.status],
+          },
+          errorConfig.status,
+        );
+        
+        // CRITICAL: Remove stack trace to prevent NestJS from logging it
+        delete (exception as any).stack;
+        throw exception;
       }
 
-      // Unknown error - hide internal details
-      throw new InternalServerErrorException('An unexpected error occurred');
+      // Unknown error
+      const exception = new InternalServerErrorException('An unexpected error occurred');
+      delete (exception as any).stack;
+      throw exception;
     }
   }
 
@@ -190,9 +264,6 @@ export class CognitoService {
   // 🧩 AUTHENTICATION & USER MANAGEMENT
   // ===========================================================================
 
-  /**
-   * User Sign-Up (triggers email verification)
-   */
   async signUp(email: string, password: string): Promise<any> {
     return this.execute(async () => {
       const { clientId } = await this.getCognitoConfig();
@@ -208,14 +279,11 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`Sign-up initiated for ${this.sanitize(email)}`);
+      this.logger.log(`Sign-up: ${this.sanitize(email)}`);
       return result;
-    }, 'Sign-up');
+    }, 'signUp');
   }
 
-  /**
-   * Confirm user email via code
-   */
   async confirmSignUp(username: string, code: string): Promise<any> {
     return this.execute(async () => {
       const { clientId } = await this.getCognitoConfig();
@@ -230,14 +298,11 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`Email confirmed for ${this.sanitize(username)}`);
+      this.logger.log(`Confirmed: ${this.sanitize(username)}`);
       return result;
-    }, 'Confirm sign-up');
+    }, 'confirmSignUp');
   }
 
-  /**
-   * Admin Confirm Sign-Up (bypass email verification)
-   */
   async adminConfirmSignUp(username: string): Promise<any> {
     return this.execute(async () => {
       const { userPoolId } = await this.getCognitoConfig();
@@ -249,14 +314,11 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`Admin confirmed ${this.sanitize(username)}`);
+      this.logger.log(`Admin confirmed: ${this.sanitize(username)}`);
       return result;
-    }, 'Admin confirm sign-up');
+    }, 'adminConfirmSignUp');
   }
 
-  /**
-   * Admin creates user with temporary password
-   */
   async adminCreateUser(email: string, tempPassword: string, verified = false): Promise<any> {
     return this.execute(async () => {
       const { userPoolId } = await this.getCognitoConfig();
@@ -274,14 +336,11 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`Admin created user ${this.sanitize(email)}`);
+      this.logger.log(`User created: ${this.sanitize(email)}`);
       return result;
-    }, 'Admin create user');
+    }, 'adminCreateUser');
   }
 
-  /**
-   * Admin sets permanent password
-   */
   async setPassword(username: string, newPassword: string): Promise<any> {
     return this.execute(async () => {
       const { userPoolId } = await this.getCognitoConfig();
@@ -295,14 +354,11 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`Password set for ${this.sanitize(username)}`);
+      this.logger.log(`Password set: ${this.sanitize(username)}`);
       return result;
-    }, 'Set password');
+    }, 'setPassword');
   }
 
-  /**
-   * Login with username/password (supports MFA)
-   */
   async adminLogin(username: string, password: string): Promise<any> {
     return this.execute(async () => {
       const { userPoolId, clientId } = await this.getCognitoConfig();
@@ -323,18 +379,15 @@ export class CognitoService {
       const response = await client.send(command);
 
       if (response.ChallengeName === 'SOFTWARE_TOKEN_MFA' || response.ChallengeName === 'SMS_MFA') {
-        this.logger.log(`MFA required for ${this.sanitize(username)}`);
+        this.logger.log(`MFA required: ${this.sanitize(username)}`);
         return { challenge: response.ChallengeName, session: response.Session };
       }
 
-      this.logger.log(`Login successful for ${this.sanitize(username)}`);
+      this.logger.log(`Login success: ${this.sanitize(username)}`);
       return response.AuthenticationResult;
-    }, 'Login');
+    }, 'adminLogin');
   }
 
-  /**
-   * Verify MFA Challenge
-   */
   async verifyMFA(username: string, session: string, code: string): Promise<any> {
     return this.execute(async () => {
       const { clientId } = await this.getCognitoConfig();
@@ -351,27 +404,21 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`MFA verified for ${this.sanitize(username)}`);
+      this.logger.log(`MFA verified: ${this.sanitize(username)}`);
       return result;
-    }, 'Verify MFA');
+    }, 'verifyMFA');
   }
 
-  /**
-   * Setup MFA - Generate TOTP secret
-   */
   async setupMFA(accessToken: string): Promise<any> {
     return this.execute(async () => {
       const client = this.getClient();
       const command = new AssociateSoftwareTokenCommand({ AccessToken: accessToken });
       const result = await client.send(command);
-      this.logger.log('MFA secret generated');
+      this.logger.log('MFA setup initiated');
       return result;
-    }, 'Setup MFA');
+    }, 'setupMFA');
   }
 
-  /**
-   * Confirm MFA setup with verification code
-   */
   async confirmMFA(accessToken: string, code: string): Promise<any> {
     return this.execute(async () => {
       const client = this.getClient();
@@ -382,9 +429,9 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log('MFA setup confirmed');
+      this.logger.log('MFA confirmed');
       return result;
-    }, 'Confirm MFA');
+    }, 'confirmMFA');
   }
 
   // ===========================================================================
@@ -405,7 +452,7 @@ export class CognitoService {
       const result = await client.send(command);
       this.logger.log('Token refreshed');
       return result;
-    }, 'Refresh token');
+    }, 'refreshToken');
   }
 
   // ===========================================================================
@@ -425,9 +472,9 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`Password reset initiated for ${this.sanitize(username)}`);
+      this.logger.log(`Password reset: ${this.sanitize(username)}`);
       return result;
-    }, 'Forgot password');
+    }, 'forgotPassword');
   }
 
   async confirmForgotPassword(username: string, code: string, newPassword: string): Promise<any> {
@@ -445,9 +492,9 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`Password reset confirmed for ${this.sanitize(username)}`);
+      this.logger.log(`Password confirmed: ${this.sanitize(username)}`);
       return result;
-    }, 'Confirm forgot password');
+    }, 'confirmForgotPassword');
   }
 
   async updateUserAttributes(username: string, attributes: Record<string, string>): Promise<any> {
@@ -462,9 +509,9 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`Attributes updated for ${this.sanitize(username)}`);
+      this.logger.log(`Attributes updated: ${this.sanitize(username)}`);
       return result;
-    }, 'Update user attributes');
+    }, 'updateUserAttributes');
   }
 
   async getUser(username: string): Promise<any> {
@@ -478,9 +525,9 @@ export class CognitoService {
       });
 
       const result = await client.send(command);
-      this.logger.log(`Retrieved user ${this.sanitize(username)}`);
+      this.logger.log(`User retrieved: ${this.sanitize(username)}`);
       return result;
-    }, 'Get user');
+    }, 'getUser');
   }
 
   async globalSignOut(accessToken: string): Promise<any> {
@@ -490,6 +537,38 @@ export class CognitoService {
       const result = await client.send(command);
       this.logger.log('Global sign-out');
       return result;
-    }, 'Global sign-out');
+    }, 'globalSignOut');
+  }
+
+  // ===========================================================================
+  // 📊 METRICS & HEALTH
+  // ===========================================================================
+
+  /**
+   * Get service metrics (for monitoring/health checks)
+   */
+  getMetrics() {
+    return {
+      totalRequests: this.metrics.requests,
+      totalErrors: this.metrics.errors,
+      errorRate: this.metrics.requests > 0 
+        ? ((this.metrics.errors / this.metrics.requests) * 100).toFixed(2) + '%'
+        : '0%',
+      errorsByType: Object.fromEntries(this.metrics.errorsByType),
+      cacheStats: {
+        configCached: !!this.configCache,
+        secretHashCacheSize: this.secretHashCache.size,
+      },
+    };
+  }
+
+  /**
+   * Clear caches (useful for testing or forcing refresh)
+   */
+  clearCaches() {
+    this.configCache = null;
+    this.configCacheTime = 0;
+    this.secretHashCache.clear();
+    this.logger.log('Caches cleared');
   }
 }

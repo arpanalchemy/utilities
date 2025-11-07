@@ -1,11 +1,11 @@
-## @alchemy/utilities
+## alchemy-utilities
 
 A collection of NestJS-friendly utilities and helpers used across Alchemy services. It bundles common integrations (AWS S3/SQS/EventBridge/Textract), HTTP helpers, Redis caching helpers, logging/interceptors, decorators, and misc utility services.
 
 ### Install
 
 ```bash
-npm install @alchemy/utilities
+npm install alchemy-utilities
 ```
 
 Requires Node 16+, NestJS 8+, and TypeScript.
@@ -29,7 +29,7 @@ Most classes are Nest providers. Import `UtilsModule` to make commonly used prov
 
 ```ts
 import { Module } from '@nestjs/common';
-import { UtilsModule, S3Service, AxiosHelper } from '@alchemy/utilities';
+import { UtilsModule, S3Service, AxiosHelper } from 'alchemy-utilities';
 
 @Module({
   imports: [UtilsModule],
@@ -153,7 +153,7 @@ WinstonModule.forRoot({
 ### Example: Using AxiosHelper + URLService
 
 ```ts
-import { AxiosHelper, URLService } from '@alchemy/utilities';
+import { AxiosHelper, URLService } from 'alchemy-utilities';
 
 export class ExampleService {
   constructor(
@@ -170,7 +170,7 @@ export class ExampleService {
 }
 
 
-# @alchemy/utilities
+# alchemy-utilities
 
 A collection of NestJS-friendly utilities and helpers used across Alchemy services. It bundles common integrations (AWS S3/SQS/EventBridge/Textract), HTTP helpers, Redis caching helpers, logging/interceptors, decorators, and misc utility services.
 
@@ -179,7 +179,7 @@ A collection of NestJS-friendly utilities and helpers used across Alchemy servic
 ## 📦 Install
 
 ```bash
-npm install @alchemy/utilities
+npm install alchemy-utilities
 ```
 
 Requires Node 16+, NestJS 8+, and TypeScript.
@@ -309,7 +309,7 @@ npm publish --registry=https://npm.pkg.github.com/
 ### ✅ Step 6: Verify
 
 ```bash
-npm info @alchemy/utilities version
+npm info alchemy-utilities version
 ```
 
 ---

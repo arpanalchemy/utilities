@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Inject,
   Logger,
   InternalServerErrorException,
   HttpException,
@@ -31,6 +32,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { createHmac } from 'crypto';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
+import { SecretsService } from '../secretsService/secrets.service';
 
 /**
  * Production-Ready AWS Cognito Service
@@ -63,6 +65,11 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 @Injectable()
 export class CognitoService implements OnModuleDestroy {
   private readonly logger = new Logger(CognitoService.name);
+    constructor(
+    @Inject(SecretsService)
+    private readonly secretService: SecretsService
+  ) {}
+
 
   // Singleton client with connection pooling
   private cognitoClient: CognitoIdentityProviderClient | null = null;
@@ -142,9 +149,33 @@ export class CognitoService implements OnModuleDestroy {
       return this.configCache;
     }
 
-    const userPoolId = process.env.AWS_COGNITO_USER_POOL_ID;
-    const clientId = process.env.AWS_COGNITO_CLIENT_ID;
-    const clientSecret = process.env.AWS_COGNITO_CLIENT_SECRET;
+    let userPoolId: string | undefined;
+    let clientId: string | undefined;
+    let clientSecret: string | undefined;
+
+    // First try to get from environment variables
+    userPoolId = process.env.AWS_COGNITO_USER_POOL_ID;
+    clientId = process.env.AWS_COGNITO_CLIENT_ID;
+    clientSecret = process.env.AWS_COGNITO_CLIENT_SECRET;
+
+    // If any required config is missing from env vars, try secret service
+    if ((!userPoolId || !clientId) && this.secretService) {
+      try {
+        this.logger.debug('Fetching Cognito config from secret service');
+        if (!userPoolId) {
+          userPoolId = await this.secretService.getSecret('cognito', 'user_pool_id');
+        }
+        if (!clientId) {
+          clientId = await this.secretService.getSecret('cognito', 'client_id');
+        }
+        if (!clientSecret) {
+          clientSecret = await this.secretService.getSecret('cognito', 'client_secret');
+        }
+        this.logger.log('Cognito config loaded from secret service');
+      } catch (error) {
+        this.logger.warn('Failed to fetch from secret service: ' + error.message);
+      }
+    }
 
     if (!userPoolId || !clientId) {
       throw new InternalServerErrorException(
@@ -523,10 +554,14 @@ export class CognitoService implements OnModuleDestroy {
    * Initiate forgot password flow
    */
   async forgotPassword(username: string) {
-    return this.execute(async () => {
+    try {
       const { clientId } = await this.getCognitoConfig();
       const client = this.getClient();
       const secretHash = await this.computeSecretHash(username);
+
+      this.logger.debug(`Initiating password reset for: ${this.sanitize(username)}`);
+      this.logger.debug(`Using clientId: ${clientId}`);
+      this.logger.debug(`Secret hash computed: ${!!secretHash}`);
 
       const command = new ForgotPasswordCommand({
         ClientId: clientId,
@@ -534,14 +569,25 @@ export class CognitoService implements OnModuleDestroy {
         ...(secretHash && { SecretHash: secretHash }),
       });
 
+      this.logger.debug('Sending ForgotPasswordCommand to Cognito');
       const result = await client.send(command);
+      
       this.logger.log(`Password reset initiated: ${this.sanitize(username)}`);
+      this.logger.debug(`Code delivery details: ${JSON.stringify(result.CodeDeliveryDetails)}`);
       
       return {
         codeDelivery: result.CodeDeliveryDetails,
         message: 'Password reset code sent',
       };
-    }, 'forgotPassword');
+    } catch (error) {
+      this.logger.error(`Failed to initiate password reset for ${this.sanitize(username)}: ${error.message}`);
+      this.logger.debug(`Error details: ${JSON.stringify({
+        name: error.name,
+        code: error.code,
+        statusCode: error.$metadata?.httpStatusCode,
+      })}`);
+      throw error;
+    }
   }
 
   /**

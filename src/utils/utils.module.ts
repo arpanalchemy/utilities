@@ -42,6 +42,7 @@ import { CognitoService } from './cognitoService/cognito.service';
     DateCalculationUtil,
     RedisGenericHelper,
     RazorpayHelper,
+    CognitoService,
   ],
 })
 export class UtilsModule {}

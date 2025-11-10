@@ -1,1012 +1,852 @@
-# 🔐 Authentication Service
+# AWS Cognito Service - Production Ready
 
-A comprehensive, production-ready authentication service built with NestJS and AWS Cognito, providing secure user management, MFA support, and complete authentication workflows.
+A production-ready, feature-rich AWS Cognito authentication service for NestJS applications with built-in security, and monitoring.
+
+## 📦 Installation
+
+```bash
+npm install alchemy-utilities
+```
+
+## 🚀 Features
+
+- ✅ **Complete Authentication Flow** - Signup, login, MFA, password reset
+- 🔐 **JWT Token Management** - Validation, verification, and refresh
+- 🛡️ **Security Features**
+  - Token blacklisting and revocation
+  - Input validation and sanitization
+- 📊 **Monitoring** - Built-in metrics and health checks
+- ⚡ **Performance**
+  - Configuration caching
+  - Secret hash caching
+  - Connection pooling
+  - Request timeouts & retries
+- 🔒 **Privacy** - Sanitized logging (emails masked)
+- 🧹 **Memory Safe** - Automatic cleanup and leak prevention
 
 ---
 
 ## 📋 Table of Contents
 
-- [Features](#features)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
+- [Environment Variables](#environment-variables)
+- [Quick Start](#quick-start)
 - [Configuration](#configuration)
-- [API Documentation](#api-documentation)
-- [Authentication Flows](#authentication-flows)
-- [Security Best Practices](#security-best-practices)
-- [Monitoring & Observability](#monitoring--observability)
+- [Authentication Methods](#authentication-methods)
+- [JWT Token Management](#jwt-token-management)
+- [User Management](#user-management)
+- [MFA Setup](#mfa-setup)
 - [Error Handling](#error-handling)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [Troubleshooting](#troubleshooting)
+- [Monitoring](#monitoring)
+- [API Reference](#api-reference)
 
 ---
 
-## ✨ Features
-
-### Core Authentication
-- ✅ User registration with email verification
-- ✅ Secure login with JWT tokens
-- ✅ Multi-factor authentication (TOTP)
-- ✅ Token refresh mechanism
-- ✅ Secure logout (global sign-out)
-- ✅ Password reset flows
-
-### User Management
-- ✅ Admin user creation
-- ✅ User profile management
-- ✅ Account enable/disable
-- ✅ User listing with pagination
-- ✅ Attribute updates
-- ✅ User deletion
-
-### Security Features
-- ✅ AWS Cognito integration
-- ✅ MFA with QR code generation
-- ✅ Temporary password support
-- ✅ Admin confirmation bypass
-- ✅ Comprehensive logging
-
-### Monitoring
-- ✅ Health check endpoint
-- ✅ Service metrics
-- ✅ Request logging
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────┐
-│   API Gateway   │
-│   (NestJS)      │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Auth Service   │◄──── Business Logic Layer
-│  (This Service) │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Cognito Service │◄──── AWS SDK Wrapper
-│ (alchemy-utils) │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  AWS Cognito    │◄──── Identity Provider
-│   User Pool     │
-└─────────────────┘
-```
-
-### Service Layers
-
-1. **Controller Layer**: HTTP request handling, validation, routing
-2. **Service Layer** (This file): Business logic, transformation, coordination
-3. **Integration Layer**: AWS Cognito SDK wrapper
-4. **AWS Cognito**: Identity and access management
-
----
-
-## 📦 Prerequisites
+## 🔧 Environment Variables
 
 ### Required
-- Node.js >= 18.x
-- NestJS >= 10.x
-- AWS Account with Cognito User Pool
-- `alchemy-utilities` package with CognitoService
 
-### AWS Cognito Setup
-1. Create a User Pool in AWS Cognito
-2. Configure app client (no client secret)
-3. Enable required attributes (email)
-4. Configure password policies
-5. Set up email/SMS verification
-
----
-
-## 🚀 Installation
-
-```bash
-# Install dependencies
-npm install
-
-# Install peer dependencies
-npm install @nestjs/common @nestjs/core
-npm install alchemy-utilities
-```
-
----
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-Create a `.env` file in your project root:
-
-```bash
-# ============================================================================
-# AWS COGNITO CONFIGURATION (REQUIRED)
-# ============================================================================
-# AWS Region where your Cognito User Pool is located
+```env
+# AWS Configuration
 AWS_REGION=us-east-1
+AWS_COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
+AWS_COGNITO_CLIENT_ID=your-client-id
 
-# Your Cognito User Pool ID (found in AWS Console > Cognito > User Pools)
-# Format: <region>_<alphanumeric>
-COGNITO_USER_POOL_ID=us-east-1_AbCd12345
-
-# Your Cognito App Client ID (found in User Pool > App Integration > App Clients)
-# This should be a client WITHOUT client secret for security
-COGNITO_CLIENT_ID=1a2b3c4d5e6f7g8h9i0j1k2l3m
-
-# ============================================================================
-# AWS CREDENTIALS (OPTIONAL - Use IAM Roles in production)
-# ============================================================================
-# Only needed if NOT using IAM roles (EC2, ECS, Lambda, etc.)
-# DO NOT commit these to version control - use AWS Secrets Manager/Parameter Store
-# AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
-# AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-
-# ============================================================================
-# APPLICATION CONFIGURATION (REQUIRED)
-# ============================================================================
-# Application name (used in MFA QR codes and email templates)
-APP_NAME=MyApp
-
-# MFA Issuer name (appears in authenticator apps like Google Authenticator)
-MFA_ISSUER=MyApp
-
-# Server port
-PORT=3000
-
-# Node environment
-NODE_ENV=production
-
-# ============================================================================
-# JWT TOKEN CONFIGURATION (Managed by Cognito)
-# ============================================================================
-# Note: JWT tokens are automatically managed by AWS Cognito
-# Token lifetimes are configured in AWS Cognito User Pool settings:
-# - Access Token expiration (default: 1 hour, range: 5 mins - 24 hours)
-# - ID Token expiration (default: 1 hour, range: 5 mins - 24 hours)  
-# - Refresh Token expiration (default: 30 days, range: 1 hour - 10 years)
-
-# To configure JWT tokens:
-# AWS Console > Cognito > User Pools > Your Pool > App Integration > 
-# App Clients > Edit > Token expiration settings
-
-# ============================================================================
-# CORS CONFIGURATION (REQUIRED for web clients)
-# ============================================================================
-# Comma-separated list of allowed origins
-CORS_ORIGINS=https://yourdomain.com,https://app.yourdomain.com,http://localhost:3000
-
-# Allow credentials (cookies, authorization headers)
-CORS_CREDENTIALS=true
-
-# ============================================================================
-# RATE LIMITING (RECOMMENDED for production)
-# ============================================================================
-# Time window in seconds
-RATE_LIMIT_TTL=60
-
-# Maximum requests per time window
-RATE_LIMIT_MAX=100
-
-# Auth endpoints stricter limits
-AUTH_RATE_LIMIT_TTL=60
-AUTH_RATE_LIMIT_MAX=10
-
-# ============================================================================
-# LOGGING CONFIGURATION (OPTIONAL)
-# ============================================================================
-# Log level: debug, info, warn, error
-LOG_LEVEL=info
-
-# Enable request logging
-ENABLE_REQUEST_LOGGING=true
-
-# ============================================================================
-# MONITORING & OBSERVABILITY (OPTIONAL)
-# ============================================================================
-# Application Performance Monitoring
-# APM_SERVICE_NAME=auth-service
-# APM_SERVER_URL=https://apm.yourdomain.com
-# APM_SECRET_TOKEN=your-apm-token
-
-# Sentry Error Tracking
-# SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
-
-# ============================================================================
-# SECURITY HEADERS (RECOMMENDED)
-# ============================================================================
-# Content Security Policy
-# CSP_DIRECTIVES=default-src 'self'; script-src 'self' 'unsafe-inline'
-
-# ============================================================================
-# EMAIL CONFIGURATION (If using custom email templates)
-# ============================================================================
-# These are managed in Cognito, but you can reference them here
-# SUPPORT_EMAIL=support@yourdomain.com
-# NO_REPLY_EMAIL=noreply@yourdomain.com
+# Optional: Required if using client secret
+AWS_COGNITO_CLIENT_SECRET=your-client-secret
 ```
 
-### AWS Cognito JWT Token Configuration
+### Optional
 
-JWT tokens in this service are **automatically managed by AWS Cognito**. You don't need to configure JWT secrets or signing keys manually.
-
-#### Token Types
-
-1. **Access Token** (`accessToken`)
-   - Used for API authentication
-   - Contains user permissions and groups
-   - Short-lived (default: 1 hour)
-   - Used in `Authorization: Bearer <token>` header
-
-2. **ID Token** (`idToken`)
-   - Contains user identity information
-   - Includes custom attributes
-   - Short-lived (default: 1 hour)
-   - Used for user profile data
-
-3. **Refresh Token** (`refreshToken`)
-   - Used to obtain new access/ID tokens
-   - Long-lived (default: 30 days)
-   - Should be stored securely (httpOnly cookies recommended)
-   - Cannot be revoked individually (only via global sign-out)
-
-#### Configure Token Lifetimes in AWS Cognito
-
-**Via AWS Console:**
-```
-1. Go to AWS Cognito Console
-2. Select your User Pool
-3. Go to "App Integration" → "App clients and analytics"
-4. Click on your app client
-5. Click "Edit" under "Hosted UI settings"
-6. Scroll to "Token expiration settings":
-   - Access token expiration: 1 hour (3600 seconds) [Range: 5m - 24h]
-   - ID token expiration: 1 hour (3600 seconds) [Range: 5m - 24h]
-   - Refresh token expiration: 30 days [Range: 1h - 10 years]
-7. Save changes
+```env
+# Logging
+LOG_LEVEL=debug  # Enable detailed operation logging
+NODE_ENV=production  # Hide stack traces in production
 ```
 
-**Via AWS CLI:**
-```bash
-aws cognito-idp update-user-pool-client \
-  --user-pool-id us-east-1_AbCd12345 \
-  --client-id 1a2b3c4d5e6f7g8h9i0j1k2l3m \
-  --access-token-validity 60 \
-  --id-token-validity 60 \
-  --refresh-token-validity 30 \
-  --token-validity-units AccessToken=minutes,IdToken=minutes,RefreshToken=days
+### Using AWS Systems Manager (SSM)
+
+If you have `SecretsService` configured, the service will automatically fetch credentials from SSM Parameter Store:
+
+```
+/cognito/user_pool_id
+/cognito/client_id
+/cognito/client_secret
 ```
 
-**Via Terraform:**
-```hcl
-resource "aws_cognito_user_pool_client" "client" {
-  name         = "my-app-client"
-  user_pool_id = aws_cognito_user_pool.pool.id
-
-  access_token_validity  = 60  # minutes
-  id_token_validity      = 60  # minutes
-  refresh_token_validity = 30  # days
-
-  token_validity_units {
-    access_token  = "minutes"
-    id_token      = "minutes"
-    refresh_token = "days"
-  }
-}
-```
-
-#### JWT Token Structure
-
-**Access Token Payload Example:**
+**IAM Permissions Required:**
 ```json
 {
-  "sub": "user-uuid",
-  "iss": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_AbCd12345",
-  "client_id": "1a2b3c4d5e6f7g8h9i0j1k2l3m",
-  "origin_jti": "xxx",
-  "event_id": "xxx",
-  "token_use": "access",
-  "scope": "aws.cognito.signin.user.admin",
-  "auth_time": 1699353600,
-  "exp": 1699357200,
-  "iat": 1699353600,
-  "jti": "xxx",
-  "username": "user@example.com"
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters"
+      ],
+      "Resource": "arn:aws:ssm:REGION:ACCOUNT:parameter/cognito/*"
+    }
+  ]
 }
 ```
 
-**ID Token Payload Example:**
-```json
-{
-  "sub": "user-uuid",
-  "email_verified": true,
-  "iss": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_AbCd12345",
-  "cognito:username": "user@example.com",
-  "origin_jti": "xxx",
-  "aud": "1a2b3c4d5e6f7g8h9i0j1k2l3m",
-  "event_id": "xxx",
-  "token_use": "id",
-  "auth_time": 1699353600,
-  "exp": 1699357200,
-  "iat": 1699353600,
-  "email": "user@example.com",
-  "name": "John Doe"
-}
-```
+---
 
-### Module Configuration
+## 🚀 Quick Start
 
-```typescript
-// app.module.ts
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { AuthModule } from './auth/auth.module';
-
-@Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '.env',
-    }),
-    AuthModule,
-  ],
-})
-export class AppModule {}
-```
+### 1. Module Setup
 
 ```typescript
 // auth.module.ts
 import { Module } from '@nestjs/common';
-import { CognitoModule } from 'alchemy-utilities';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
+import { CognitoService } from 'alchemy-utilities';
 
 @Module({
-  imports: [
-    CognitoModule.forRoot({
-      region: process.env.AWS_REGION,
-      userPoolId: process.env.COGNITO_USER_POOL_ID,
-      clientId: process.env.COGNITO_CLIENT_ID,
-    }),
-  ],
-  controllers: [AuthController],
-  providers: [AuthService],
-  exports: [AuthService],
+  providers: [CognitoService],
+  exports: [CognitoService],
 })
 export class AuthModule {}
 ```
 
----
-
-## 📚 API Documentation
-
-### Base URL
-```
-https://api.yourdomain.com/auth
-```
-
-### Authentication
-Most admin endpoints require an access token in the Authorization header:
-```
-Authorization: Bearer <access_token>
-```
-
----
-
-## 🔄 Authentication Flows
-
-### 1. User Registration Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant API as Auth API
-    participant C as Cognito
-    participant E as Email
-
-    U->>API: POST /auth/signup
-    API->>C: Create User
-    C->>E: Send Verification Code
-    C-->>API: User Created
-    API-->>U: Success + Instructions
-    
-    E->>U: Verification Code
-    U->>API: POST /auth/confirm-signup
-    API->>C: Confirm Sign Up
-    C-->>API: Confirmed
-    API-->>U: Email Verified
-```
-
-**Step 1: Sign Up**
-```bash
-POST /auth/signup
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "SecurePass123!",
-  "attributes": {
-    "name": "John Doe",
-    "phone_number": "+1234567890"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "User registered successfully. Please check your email for verification code.",
-  "data": {
-    "userId": "user-uuid",
-    "emailVerified": false,
-    "codeDeliveryDestination": "u***@example.com"
-  }
-}
-```
-
-**Step 2: Confirm Email**
-```bash
-POST /auth/confirm-signup
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "code": "123456"
-}
-```
-
----
-
-### 2. Login Flow
-
-**Standard Login:**
-```bash
-POST /auth/login
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "SecurePass123!"
-}
-```
-
-**Success Response:**
-```json
-{
-  "success": true,
-  "message": "Login successful",
-  "data": {
-    "accessToken": "eyJhbGc...",
-    "idToken": "eyJhbGc...",
-    "refreshToken": "eyJjdHk...",
-    "expiresIn": 3600,
-    "tokenType": "Bearer"
-  }
-}
-```
-
-**MFA Required Response:**
-```json
-{
-  "success": true,
-  "requiresMFA": true,
-  "message": "MFA code required",
-  "data": {
-    "challenge": "SMS_MFA",
-    "session": "session-token"
-  }
-}
-```
-
----
-
-### 3. MFA Setup Flow
-
-**Step 1: Initiate MFA Setup**
-```bash
-POST /auth/mfa/setup
-Authorization: Bearer <access_token>
-Content-Type: application/json
-
-{
-  "accessToken": "eyJhbGc..."
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "MFA setup initiated. Scan QR code with your authenticator app.",
-  "data": {
-    "secretCode": "JBSWY3DPEHPK3PXP",
-    "qrCodeUrl": "otpauth://totp/MyApp:User?secret=JBSWY3DPEHPK3PXP&issuer=MyApp",
-    "session": "session-token"
-  }
-}
-```
-
-**Step 2: Confirm MFA**
-```bash
-POST /auth/mfa/confirm
-Content-Type: application/json
-
-{
-  "accessToken": "eyJhbGc...",
-  "code": "123456",
-  "deviceName": "iPhone 13"
-}
-```
-
----
-
-### 4. Password Reset Flow
-
-**Step 1: Request Reset Code**
-```bash
-POST /auth/forgot-password
-Content-Type: application/json
-
-{
-  "email": "user@example.com"
-}
-```
-
-**Step 2: Reset Password**
-```bash
-POST /auth/reset-password
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "code": "123456",
-  "newPassword": "NewSecurePass123!"
-}
-```
-
----
-
-### 5. Token Refresh Flow
-
-```bash
-POST /auth/refresh-token
-Content-Type: application/json
-
-{
-  "refreshToken": "eyJjdHk..."
-}
-```
-
----
-
-### 6. Admin Operations
-
-**Create User:**
-```bash
-POST /auth/admin/users
-Authorization: Bearer <admin_access_token>
-Content-Type: application/json
-
-{
-  "email": "newuser@example.com",
-  "temporaryPassword": "TempPass123!",
-  "emailVerified": true,
-  "attributes": {
-    "name": "Jane Doe"
-  }
-}
-```
-
-**List Users:**
-```bash
-GET /auth/admin/users/list?limit=20&filter=email^="john"
-Authorization: Bearer <admin_access_token>
-```
-
-**Get User:**
-```bash
-POST /auth/admin/users/get
-Authorization: Bearer <admin_access_token>
-Content-Type: application/json
-
-{
-  "email": "user@example.com"
-}
-```
-
-**Update User Attributes:**
-```bash
-PUT /auth/admin/users/attributes
-Authorization: Bearer <admin_access_token>
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "attributes": {
-    "name": "Updated Name",
-    "phone_number": "+1234567890"
-  }
-}
-```
-
-**Disable/Enable User:**
-```bash
-POST /auth/admin/users/disable
-Authorization: Bearer <admin_access_token>
-Content-Type: application/json
-
-{
-  "email": "user@example.com"
-}
-```
-
-**Delete User:**
-```bash
-DELETE /auth/admin/users
-Authorization: Bearer <admin_access_token>
-Content-Type: application/json
-
-{
-  "email": "user@example.com"
-}
-```
-
----
-
-## 🔒 Security Best Practices
-
-### Implemented
-
-1. **Password Policies** (Configured in Cognito):
-   - Minimum length: 8 characters
-   - Requires uppercase, lowercase, numbers, special characters
-   - Password history: 24 previous passwords
-
-2. **Token Security**:
-   - JWT tokens with expiration
-   - Refresh token rotation
-   - Global sign-out invalidates all tokens
-
-3. **MFA Support**:
-   - TOTP-based MFA
-   - QR code generation for easy setup
-   - Device trust management
-
-4. **Email Verification**:
-   - Required for account activation
-   - Admin bypass option available
-
-### Recommended Enhancements
+### 2. Basic Usage
 
 ```typescript
-// Add rate limiting
-import { ThrottlerModule } from '@nestjs/throttler';
+// auth.controller.ts
+import { Controller, Post, Body } from '@nestjs/common';
+import { CognitoService } from 'alchemy-utilities';
 
-@Module({
-  imports: [
-    ThrottlerModule.forRoot({
-      ttl: 60,
-      limit: 10, // 10 requests per minute
-    }),
-  ],
-})
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly cognito: CognitoService) {}
 
-// Add helmet for security headers
-import helmet from 'helmet';
-app.use(helmet());
+  @Post('signup')
+  async signup(@Body() body: { email: string; password: string }) {
+    return this.cognito.signUp(body.email, body.password);
+  }
 
-// Add CORS
-app.enableCors({
-  origin: process.env.CORS_ORIGINS?.split(','),
-  credentials: true,
+  @Post('login')
+  async login(@Body() body: { email: string; password: string }) {
+    return this.cognito.login(body.email, body.password);
+  }
+}
+```
+
+---
+
+## 🔐 Authentication Methods
+
+### Sign Up
+
+```typescript
+// Basic signup
+const result = await cognito.signUp('user@example.com', 'SecurePass123!');
+
+// Signup with attributes
+const result = await cognito.signUp(
+  'user@example.com',
+  'SecurePass123!',
+  {
+    name: 'John Doe',
+    phone_number: '+1234567890',
+    birthdate: '1990-01-01'
+  }
+);
+
+// Response
+{
+  userId: 'user-uuid',
+  confirmed: false,
+  codeDelivery: {
+    destination: 'u***@example.com',
+    deliveryMedium: 'EMAIL'
+  }
+}
+```
+
+### Confirm Sign Up
+
+```typescript
+await cognito.confirmSignUp('user@example.com', '123456');
+// Returns: { success: true, message: 'User confirmed successfully' }
+```
+
+### Login
+
+```typescript
+const result = await cognito.login('user@example.com', 'SecurePass123!');
+
+// Success Response
+{
+  accessToken: 'eyJraWQiOiI...',
+  idToken: 'eyJraWQiOiI...',
+  refreshToken: 'eyJjdHkiOiI...',
+  expiresIn: 3600,
+  tokenType: 'Bearer'
+}
+
+// MFA Challenge Response
+{
+  requiresMFA: true,
+  challenge: 'SOFTWARE_TOKEN_MFA',
+  session: 'session-token'
+}
+
+// New Password Required
+{
+  requiresNewPassword: true,
+  session: 'session-token'
+}
+```
+
+### Verify MFA
+
+```typescript
+const result = await cognito.verifyMFA(
+  'user@example.com',
+  'session-token',
+  '123456',
+  ChallengeNameType.SOFTWARE_TOKEN_MFA
+);
+// Returns JWT tokens
+```
+
+### Refresh Token
+
+```typescript
+const result = await cognito.refreshToken('refresh-token-here');
+// Returns new accessToken and idToken
+```
+
+### Logout
+
+```typescript
+await cognito.globalSignOut('access-token');
+// Returns: { success: true, message: 'Signed out successfully' }
+```
+
+---
+
+## 🎫 JWT Token Management
+
+### Verify Token (Full Validation)
+
+```typescript
+try {
+  const payload = await cognito.verifyToken(accessToken);
+  
+  console.log(payload.sub);              // User ID
+  console.log(payload.email);            // Email
+  console.log(payload['cognito:username']); // Username
+  console.log(payload['cognito:groups']);   // User groups
+} catch (error) {
+  // Token invalid, expired, or revoked
+}
+```
+
+### Decode Token (No Verification)
+
+```typescript
+const payload = cognito.decodeToken(accessToken);
+// Use for non-critical operations only
+```
+
+### Check Token Expiration
+
+```typescript
+const isExpired = cognito.isTokenExpired(accessToken);
+if (isExpired) {
+  // Refresh the token
+}
+```
+
+### Token Payload Interface
+
+```typescript
+interface TokenPayload {
+  sub: string;                    // User ID
+  email?: string;                 // User email
+  email_verified?: boolean;       // Email verification status
+  'cognito:username'?: string;    // Username
+  'cognito:groups'?: string[];    // User groups
+  exp: number;                    // Expiration timestamp
+  iat: number;                    // Issued at timestamp
+}
+```
+
+---
+
+## 👤 User Management
+
+### Get User Details
+
+```typescript
+const user = await cognito.getUser('user@example.com');
+
+// Response
+{
+  username: 'user@example.com',
+  status: 'CONFIRMED',
+  enabled: true,
+  created: Date,
+  modified: Date,
+  attributes: {
+    email: 'user@example.com',
+    email_verified: 'true',
+    name: 'John Doe'
+  }
+}
+```
+
+### Get Current User (from token)
+
+```typescript
+const user = await cognito.getCurrentUser(accessToken);
+
+// Response
+{
+  username: 'user@example.com',
+  attributes: {
+    email: 'user@example.com',
+    name: 'John Doe'
+  }
+}
+```
+
+### Update User Attributes
+
+```typescript
+await cognito.updateUserAttributes('user@example.com', {
+  name: 'Jane Doe',
+  phone_number: '+1234567890'
 });
 ```
 
+### List Users
+
+```typescript
+const result = await cognito.listUsers(20, paginationToken);
+
+// Response
+{
+  users: [
+    {
+      username: 'user@example.com',
+      status: 'CONFIRMED',
+      enabled: true,
+      created: Date,
+      modified: Date,
+      attributes: { ... }
+    }
+  ],
+  nextToken: 'pagination-token'
+}
+
+// With filter
+await cognito.listUsers(20, undefined, 'email ^= "admin"');
+```
+
+### Admin Operations
+
+```typescript
+// Create user with temporary password
+await cognito.adminCreateUser(
+  'user@example.com',
+  'TempPass123!',
+  true, // email verified
+  { name: 'Admin User' }
+);
+
+// Confirm user (skip email verification)
+await cognito.adminConfirmSignUp('user@example.com');
+
+// Set permanent password
+await cognito.setPassword('user@example.com', 'NewPass123!', true);
+
+// Disable user
+await cognito.disableUser('user@example.com');
+
+// Enable user
+await cognito.enableUser('user@example.com');
+
+// Delete user
+await cognito.deleteUser('user@example.com');
+```
+
 ---
 
-## 📊 Monitoring & Observability
+## 🔒 MFA Setup
+
+### Setup MFA (Get QR Code Secret)
+
+```typescript
+const result = await cognito.setupMFA(accessToken);
+
+// Response
+{
+  secretCode: 'JBSWY3DPEHPK3PXP',
+  session: 'session-token'
+}
+
+// Generate QR Code URL (use with qrcode library)
+const qrCodeUrl = `otpauth://totp/YourApp:${email}?secret=${secretCode}&issuer=YourApp`;
+```
+
+### Confirm MFA Setup
+
+```typescript
+await cognito.confirmMFA(
+  accessToken,
+  '123456', // TOTP code from authenticator app
+  'My iPhone' // device name
+);
+
+// Response
+{
+  status: 'SUCCESS',
+  message: 'MFA enabled successfully'
+}
+```
+
+---
+
+## 🔑 Password Management
+
+### Forgot Password
+
+```typescript
+const result = await cognito.forgotPassword('user@example.com');
+
+// Response
+{
+  codeDelivery: {
+    destination: 'u***@example.com',
+    deliveryMedium: 'EMAIL'
+  },
+  message: 'Password reset code sent'
+}
+```
+
+### Confirm Forgot Password
+
+```typescript
+await cognito.confirmForgotPassword(
+  'user@example.com',
+  '123456',
+  'NewSecurePass123!'
+);
+
+// Returns: { success: true, message: 'Password reset successfully' }
+```
+
+---
+
+
+## 🚨 Error Handling
+
+### Error Response Format
+
+```typescript
+{
+  statusCode: 400,
+  message: 'Invalid verification code provided',
+  error: 'Bad Request',
+  timestamp: '2024-01-01T12:00:00.000Z'
+}
+```
+
+### Common Errors
+
+| Error | Status | Message |
+|-------|--------|---------|
+| `CodeMismatchException` | 400 | Invalid verification code provided |
+| `ExpiredCodeException` | 400 | Verification code has expired |
+| `UserNotFoundException` | 404 | User not found |
+| `NotAuthorizedException` | 401 | Invalid credentials or unauthorized access |
+| `UsernameExistsException` | 409 | User already exists |
+| `InvalidPasswordException` | 400 | Password does not meet security requirements |
+| `UserNotConfirmedException` | 403 | Please verify your email before logging in |
+| `TooManyRequestsException` | 429 | Too many requests, please try again later |
+
+### Error Handling Example
+
+```typescript
+try {
+  await cognito.login(email, password);
+} catch (error) {
+  if (error.status === 401) {
+    // Invalid credentials
+  } else if (error.status === 403) {
+    // Account locked or not confirmed
+  }
+}
+```
+
+---
+
+## 📊 Monitoring
+
+### Get Service Metrics
+
+```typescript
+const metrics = cognito.getMetrics();
+
+// Response
+{
+  totalRequests: 1234,
+  totalErrors: 12,
+  errorRate: '0.97%',
+  errorsByType: {
+    'NotAuthorizedException': 8,
+    'UserNotFoundException': 4
+  },
+  lastError: {
+    type: 'NotAuthorizedException',
+    time: Date
+  },
+  averageRequestTime: '234.56ms',
+  cache: {
+    configCached: true,
+    secretHashCacheSize: 45,
+    tokenBlacklistSize: 3
+  },
+  client: {
+    initialized: true
+  },
+  security: {
+    lockedAccounts: 2,
+    revokedTokens: 3
+  }
+}
+```
 
 ### Health Check
 
-```bash
-GET /auth/health
-```
+```typescript
+const health = await cognito.healthCheck();
 
-**Response:**
-```json
+// Response
 {
-  "success": true,
-  "message": "Service is healthy",
-  "data": {
-    "status": "healthy",
-    "cognito": "connected",
-    "timestamp": "2025-11-07T10:30:00Z"
+  status: 'healthy',
+  service: 'CognitoService',
+  timestamp: '2024-01-01T12:00:00.000Z',
+  config: {
+    userPoolId: 'us-east-1_***',
+    region: 'us-east-1'
   }
 }
 ```
 
-### Metrics
+### Clear Caches
 
-```bash
-GET /auth/metrics
+```typescript
+cognito.clearCaches();
 ```
 
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Metrics retrieved",
-  "data": {
-    "totalRequests": 15234,
-    "successfulLogins": 1234,
-    "failedLogins": 45,
-    "mfaSetups": 234,
-    "passwordResets": 67,
-    "uptime": 86400
-  }
-}
-```
+### Reset Metrics
 
-### Logging
-
-The service logs all operations with appropriate log levels:
-- `LOG`: Successful operations
-- `WARN`: Suspicious activities
-- `ERROR`: Failed operations (via CognitoService)
-
-**Log Format:**
-```
-[AuthService] Sign up attempt for: user@example.com
-[AuthService] Login attempt for: user@example.com
-[AuthService] Admin creating user: newuser@example.com
+```typescript
+cognito.resetMetrics();
 ```
 
 ---
 
-## ⚠️ Error Handling
+## 🔐 Authentication Guard Example
 
-### Standard Error Response
+```typescript
+// jwt-auth.guard.ts
+import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { CognitoService } from 'alchemy-utilities';
 
-```json
-{
-  "statusCode": 400,
-  "message": "Error message here",
-  "error": "Bad Request"
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(private cognito: CognitoService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const token = this.extractToken(request);
+
+    if (!token) {
+      return false;
+    }
+
+    try {
+      const payload = await this.cognito.verifyToken(token);
+      request.user = payload;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private extractToken(request: any): string | null {
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+    return authHeader.substring(7);
+  }
 }
 ```
 
-### Common Error Codes
-
-| Status | Error | Description |
-|--------|-------|-------------|
-| 400 | `InvalidParameterException` | Invalid input data |
-| 401 | `NotAuthorizedException` | Invalid credentials |
-| 403 | `UserNotFoundException` | User doesn't exist |
-| 409 | `UsernameExistsException` | Email already registered |
-| 429 | `TooManyRequestsException` | Rate limit exceeded |
-| 500 | `InternalErrorException` | Server error |
-
-### Error Handling Best Practices
-
-Add try-catch blocks in production:
+### Usage
 
 ```typescript
-async signUp(dto: SignUpDto) {
-  try {
-    this.logger.log(`Sign up attempt for: ${dto.email}`);
-    
-    const result = await this.cognitoService.signUp(
-      dto.email,
-      dto.password,
-      dto.attributes,
-    );
-
+@Controller('protected')
+@UseGuards(JwtAuthGuard)
+export class ProtectedController {
+  @Get('profile')
+  getProfile(@Request() req) {
     return {
-      success: true,
-      message: 'User registered successfully.',
-      data: { /* ... */ },
+      userId: req.user.sub,
+      email: req.user.email,
+      groups: req.user['cognito:groups']
     };
-  } catch (error) {
-    this.logger.error(`Sign up failed for ${dto.email}:`, error.message);
+  }
+}
+```
+
+---
+
+## 🎯 Best Practices
+
+### 1. Token Management
+
+```typescript
+// Store tokens securely (httpOnly cookies recommended)
+response.cookie('accessToken', tokens.accessToken, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'strict',
+  maxAge: 3600000 // 1 hour
+});
+
+// Always verify tokens on protected routes
+const payload = await cognito.verifyToken(accessToken);
+
+// Refresh tokens before expiration
+if (cognito.isTokenExpired(accessToken)) {
+  const newTokens = await cognito.refreshToken(refreshToken);
+}
+```
+
+### 2. Error Handling
+
+```typescript
+// Always handle specific error cases
+try {
+  await cognito.login(email, password);
+} catch (error) {
+  switch (error.status) {
+    case 401:
+      return 'Invalid credentials';
+    case 403:
+      return 'Please verify your email';
+    case 429:
+      return 'Too many attempts, try again later';
+    default:
+      return 'An error occurred';
+  }
+}
+```
+
+
+### 4. Logging
+
+```typescript
+// Enable debug logging in development
+// LOG_LEVEL=debug
+
+// Disable in production for security
+// NODE_ENV=production
+```
+
+---
+
+## 📝 TypeScript Interfaces
+
+```typescript
+// Enums
+enum ChallengeNameType {
+  SOFTWARE_TOKEN_MFA = 'SOFTWARE_TOKEN_MFA',
+  SMS_MFA = 'SMS_MFA',
+  NEW_PASSWORD_REQUIRED = 'NEW_PASSWORD_REQUIRED',
+}
+
+enum UserStatus {
+  UNCONFIRMED = 'UNCONFIRMED',
+  CONFIRMED = 'CONFIRMED',
+  ARCHIVED = 'ARCHIVED',
+  COMPROMISED = 'COMPROMISED',
+  UNKNOWN = 'UNKNOWN',
+  RESET_REQUIRED = 'RESET_REQUIRED',
+  FORCE_CHANGE_PASSWORD = 'FORCE_CHANGE_PASSWORD',
+}
+
+// Responses
+interface LoginResponse {
+  accessToken?: string;
+  idToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  tokenType?: string;
+}
+
+interface MFAChallengeResponse {
+  requiresMFA: true;
+  challenge: string;
+  session: string;
+}
+
+interface TokenPayload extends JwtPayload {
+  sub: string;
+  email?: string;
+  email_verified?: boolean;
+  'cognito:username'?: string;
+  'cognito:groups'?: string[];
+}
+
+interface UserDetails {
+  username?: string;
+  status?: string;
+  enabled?: boolean;
+  created?: Date;
+  modified?: Date;
+  attributes?: Record<string, string>;
+}
+```
+
+---
+
+## 🔧 Advanced Configuration
+
+### Custom Timeouts
+
+The service uses these defaults:
+- **Connection Timeout:** 3000ms
+- **Socket Timeout:** 5000ms
+- **Max Retry Attempts:** 3
+
+These are optimized for production use and cannot be changed without modifying the source.
+
+### Cache Configuration
+
+- **Config Cache TTL:** 5 minutes
+- **Max Cache Size:** 1000 entries
+- **JWKS Cache:** 10 minutes
+
+---
+
+## 🐛 Troubleshooting
+
+### Access Denied Error (SSM)
+
+```
+🚫 Access denied while fetching from AWS SSM
+```
+
+**Solution:** Ensure IAM role/user has `ssm:GetParameter` permission.
+
+### Configuration Missing
+
+```
+AWS Cognito configuration missing
+```
+
+**Solution:** Set environment variables or configure SSM parameters.
+
+### Token Verification Failed
+
+```
+Token verification failed: invalid signature
+```
+
+**Solutions:**
+- Ensure token is not expired
+- Check user pool ID matches
+- Verify token hasn't been revoked
+
+
+
+## 🤝 Support
+
+For issues and questions:
+- Check the [Troubleshooting](#troubleshooting) section
+- Review AWS Cognito documentation
+- Check IAM permissions for SSM and Cognito
+
+---
+
+## 🎉 Complete Example
+
+```typescript
+import { Module, Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
+import { CognitoService, ChallengeNameType } from 'alchemy-utilities';
+
+// Module
+@Module({
+  providers: [CognitoService],
+  exports: [CognitoService],
+})
+export class AuthModule {}
+
+// Controller
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly cognito: CognitoService) {}
+
+  @Post('signup')
+  async signup(@Body() body: { email: string; password: string }) {
+    return this.cognito.signUp(body.email, body.password);
+  }
+
+  @Post('confirm')
+  async confirm(@Body() body: { email: string; code: string }) {
+    return this.cognito.confirmSignUp(body.email, body.code);
+  }
+
+  @Post('login')
+  async login(@Body() body: { email: string; password: string }) {
+    const result = await this.cognito.login(body.email, body.password);
     
-    // Transform Cognito errors to user-friendly messages
-    if (error.name === 'UsernameExistsException') {
-      throw new ConflictException('Email already registered');
+    if ('requiresMFA' in result) {
+      return { requiresMFA: true, session: result.session };
     }
     
-    throw new BadRequestException(error.message);
+    return result;
+  }
+
+  @Post('verify-mfa')
+  async verifyMfa(@Body() body: { email: string; session: string; code: string }) {
+    return this.cognito.verifyMFA(
+      body.email,
+      body.session,
+      body.code,
+      ChallengeNameType.SOFTWARE_TOKEN_MFA
+    );
+  }
+
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: { email: string }) {
+    return this.cognito.forgotPassword(body.email);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body() body: { email: string; code: string; newPassword: string }) {
+    return this.cognito.confirmForgotPassword(body.email, body.code, body.newPassword);
+  }
+
+  @Get('metrics')
+  getMetrics() {
+    return this.cognito.getMetrics();
+  }
+
+  @Get('health')
+  healthCheck() {
+    return this.cognito.healthCheck();
   }
 }
 ```
 
 ---
 
-## 🧪 Testing
-
-### Unit Tests
-
-```typescript
-// auth.service.spec.ts
-describe('AuthService', () => {
-  let service: AuthService;
-  let cognitoService: CognitoService;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        {
-          provide: CognitoService,
-          useValue: {
-            signUp: jest.fn(),
-            login: jest.fn(),
-            // ... other mocks
-          },
-        },
-      ],
-    }).compile();
-
-    service = module.get<AuthService>(AuthService);
-    cognitoService = module.get<CognitoService>(CognitoService);
-  });
-
-  it('should register a new user', async () => {
-    const dto: SignUpDto = {
-      email: 'test@example.com',
-      password: 'Test123!',
-    };
-
-    jest.spyOn(cognitoService, 'signUp').mockResolvedValue({
-      userId: 'user-123',
-      confirmed: false,
-    });
-
-    const result = await service.signUp(dto);
-
-    expect(result.success).toBe(true);
-    expect(cognitoService.signUp).toHaveBeenCalledWith(
-      dto.email,
-      dto.password,
-      undefined,
-    );
-  });
-});
-```
-
-### Integration Tests
-
-```typescript
-// auth.e2e-spec.ts
-describe('Auth (e2e)', () => {
-  let app: INestApplication;
-
-  beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
-  });
-
-  it('/auth/signup (POST)', () => {
-    return request(app.getHttpServer())
-      .post('/auth/signup')
-      .send({
-        email: 'test@example.com',
-        password: 'Test123!',
-      })
-      .expect(201)
-      .expect((res) => {
-        expect(res.body.success).toBe(true);
-      });
-  });
-});
-```
-
-### Run Tests
-
-```bash
-# Unit tests
-npm run test
-
-# E2E tests
-npm run test:e2e
-
-# Test coverage
-npm run test:cov
-```
-
----
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**1. "User pool not found"**
-```bash
-# Verify Cognito configuration
-aws cognito-idp describe-user-pool --user-pool-id <pool-id>
-
-# Check environment variables
-echo $COGNITO_USER_POOL_ID
-echo $COGNITO_CLIENT_ID
-```
-
-**2. "Invalid password format"**
-- Check Cognito password policy in AWS Console
-- Ensure password meets minimum requirements
-- Verify special characters are allowed
-
-**3. "Code mismatch"**
-- Verification codes expire after 24 hours
-- Check email spam folder
-- Request new code via forgot-password flow
-
-**4. "Token expired"**
-- Access tokens expire after 1 hour (configurable)
-- Use refresh token to get new access token
-- Implement token refresh logic in frontend
-
-**5. "Rate limit exceeded"**
-- Implement exponential backoff
-- Add rate limiting middleware
-- Consider using Redis for distributed rate limiting
-
-### Debug Mode
-
-Enable detailed logging:
-```bash
-# .env
-LOG_LEVEL=debug
-NODE_ENV=development
-```
-
----
-
-## 📖 Additional Resources
-
-### AWS Cognito Documentation
-- [User Pools](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools.html)
-- [MFA Setup](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-mfa.html)
-- [Token Management](https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-with-identity-providers.html)
-
-### NestJS Documentation
-- [Authentication](https://docs.nestjs.com/security/authentication)
-- [Guards](https://docs.nestjs.com/guards)
-- [Exception Filters](https://docs.nestjs.com/exception-filters)
-
-### Security Resources
-- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-- [JWT Best Practices](https://tools.ietf.org/html/rfc8725)
-
----
-
-## 🔄 Changelog
-
-### Version 0.0.13 (Current)
-- ✅ Complete authentication flows
-- ✅ MFA support with TOTP
-- ✅ Admin user management
-- ✅ Health checks and metrics
-- ✅ Comprehensive logging
-
-### Planned Features
-- [ ] Social login (Google, Facebook)
-- [ ] Biometric authentication
-- [ ] Advanced audit logging
-- [ ] Rate limiting per user
-- [ ] IP-based access control
-- [ ] Session management dashboard
-
----
-
-**Built with ❤️ using NestJS and AWS Cognito**
+**Built with ❤️ for production use**

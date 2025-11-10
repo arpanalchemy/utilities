@@ -153,29 +153,27 @@ export class CognitoService implements OnModuleDestroy {
     let clientId: string | undefined;
     let clientSecret: string | undefined;
 
-    // First try to get from environment variables
-    userPoolId = process.env.AWS_COGNITO_USER_POOL_ID;
-    clientId = process.env.AWS_COGNITO_CLIENT_ID;
-    clientSecret = process.env.AWS_COGNITO_CLIENT_SECRET;
 
-    // If any required config is missing from env vars, try secret service
-    if ((!userPoolId || !clientId) && this.secretService) {
-      try {
-        this.logger.debug('Fetching Cognito config from secret service');
-        if (!userPoolId) {
-          userPoolId = await this.secretService.getSecret('cognito', 'user_pool_id');
-        }
-        if (!clientId) {
-          clientId = await this.secretService.getSecret('cognito', 'client_id');
-        }
-        if (!clientSecret) {
-          clientSecret = await this.secretService.getSecret('cognito', 'client_secret');
-        }
-        this.logger.log('Cognito config loaded from secret service');
-      } catch (error) {
-        this.logger.warn('Failed to fetch from secret service: ' + error.message);
-      }
+    
+  // First try to get from secret service if available
+  if (this.secretService) {
+    try {
+      this.logger.debug('Fetching Cognito config from secret service');
+      userPoolId = await this.secretService.getSecret('cognito', 'user_pool_id');
+      clientId = await this.secretService.getSecret('cognito', 'client_id');
+      clientSecret = await this.secretService.getSecret('cognito', 'client_secret');
+      this.logger.log('Cognito config loaded from secret service');
+    } catch (error) {
+      this.logger.warn('Failed to fetch from secret service, falling back to environment variables: ' + error.message);
     }
+  }
+
+  // Fall back to environment variables if secret service failed or values are missing
+  if (!userPoolId) userPoolId = process.env.AWS_COGNITO_USER_POOL_ID;
+  if (!clientId) clientId = process.env.AWS_COGNITO_CLIENT_ID;
+  if (!clientSecret) clientSecret = process.env.AWS_COGNITO_CLIENT_SECRET;
+
+
 
     if (!userPoolId || !clientId) {
       throw new InternalServerErrorException(

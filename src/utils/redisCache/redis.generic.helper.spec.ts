@@ -4,10 +4,6 @@ import { Logger } from 'winston';
 import { RedisGenericHelper } from './redis.generic.helper';
 import { RedisInstance } from './redis.instance';
 
-jest.mock('newrelic', () => ({
-  addCustomAttribute: jest.fn(),
-}));
-
 describe('RedisGenericHelper', () => {
   let redisGenericHelper: RedisGenericHelper;
   let redisInstanceMock: RedisInstance;

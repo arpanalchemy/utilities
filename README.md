@@ -71,7 +71,7 @@ From `src/index.ts` the package exports:
 
 - Utilities/Services: `S3Service`, `SecretsService`, `SqsHelper`, `URLService`, `CommonUtil`, `AxiosHelper`, `CryptoService`, `RedisInstance`, `RedisUtilHelper`, `RedisGenericHelper`, `DateCalculationUtil`, `DateUtils`, `TimeUtils`
 - External Integrations: `RazorpayHelper` (+ `razorpay.dto`), `MoengageEvents`, `Whatsapp` and `Email` helpers/DTOs, `SlackService`, `ZohoHelper`, `GcEventWebhookHelper`, `DmfWebhookHelper`
-- Interceptors: `RequestLoggerInterceptor`, `RequestCacheInterceptor`, `ResponseHashInterceptor`, `NewrelicInterceptor`, `TransactionInterceptor`
+- Interceptors: `RequestLoggerInterceptor`, `RequestCacheInterceptor`, `ResponseHashInterceptor`, `TransactionInterceptor`
 - Decorators: `@Public`, `@Request`, `@TransactionParams`, `HandleError` utilities, `CacheTrack` decorator
 - Module: `UtilsModule`
 
@@ -134,7 +134,7 @@ Refer to types for exact method signatures.
 
 - CacheTrack(cacheKey)
 
-  - Adds a New Relic custom attribute `cache_<cacheKey>` with hit/miss based on returned value
+  - Decorator for tracking cache operations (currently a no-op, can be extended for custom tracking)
 
 - Public, Request, TransactionParams
   - Common request/route metadata helpers for NestJS apps

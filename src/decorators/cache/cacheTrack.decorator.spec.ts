@@ -1,10 +1,4 @@
-import newrelic from 'newrelic';
 import { CacheTrack } from './cacheTrack.decorator';
-
-// Mock New Relic
-jest.mock('newrelic', () => ({
-  addCustomAttribute: jest.fn(),
-}));
 
 describe('CacheTrack Decorator', () => {
     let mockMethod: jest.Mock;
@@ -30,33 +24,34 @@ describe('CacheTrack Decorator', () => {
         expect(mockMethod).toHaveBeenCalled();
     });
 
-    it('should send cache hit status to New Relic when result is not null or undefined', async () => {
+    it('should return the result from the original method', async () => {
         const cacheKey = 'testKey';
-        mockMethod.mockResolvedValue('someValue');
+        const expectedResult = 'someValue';
+        mockMethod.mockResolvedValue(expectedResult);
         const decoratedMethod = CacheTrack(cacheKey)(null, '', descriptor).value;
 
-        await decoratedMethod();
+        const result = await decoratedMethod();
 
-        expect(newrelic.addCustomAttribute).toHaveBeenCalledWith(`cache_${cacheKey}`, 'true');
+        expect(result).toBe(expectedResult);
     });
 
-    it('should send cache miss status to New Relic when result is null', async () => {
+    it('should return null when the original method returns null', async () => {
         const cacheKey = 'testKey';
         mockMethod.mockResolvedValue(null);
         const decoratedMethod = CacheTrack(cacheKey)(null, '', descriptor).value;
 
-        await decoratedMethod();
+        const result = await decoratedMethod();
 
-        expect(newrelic.addCustomAttribute).toHaveBeenCalledWith(`cache_${cacheKey}`, 'false');
+        expect(result).toBeNull();
     });
 
-    it('should send cache miss status to New Relic when result is undefined', async () => {
+    it('should return undefined when the original method returns undefined', async () => {
         const cacheKey = 'testKey';
         mockMethod.mockResolvedValue(undefined);
         const decoratedMethod = CacheTrack(cacheKey)(null, '', descriptor).value;
 
-        await decoratedMethod();
+        const result = await decoratedMethod();
 
-        expect(newrelic.addCustomAttribute).toHaveBeenCalledWith(`cache_${cacheKey}`, 'false');
+        expect(result).toBeUndefined();
     });
 });

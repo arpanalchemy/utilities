@@ -1,0 +1,192 @@
+# @alchemy/utilities - Cursor Rules
+
+## Project Overview
+
+This is a NestJS utilities package (`@alchemy/utilities`) that provides reusable services, helpers, interceptors, and decorators for Alchemy services. It includes AWS integrations (S3, SQS, EventBridge, Textract), HTTP helpers, Redis caching, logging, and various utility services.
+
+## Code Style & Standards
+
+### TypeScript
+
+- Use TypeScript with strict typing where possible
+- Prefer interfaces for object shapes, types for unions/intersections
+- Use explicit return types for public methods
+- Avoid `any` - use `unknown` or proper types instead
+- Use optional chaining (`?.`) and nullish coalescing (`??`) appropriately
+
+### NestJS Patterns
+
+- All services must be `@Injectable()` classes
+- Use dependency injection via constructor injection
+- Use `@Inject()` decorator when injecting tokens (e.g., `WINSTON_MODULE_PROVIDER`)
+- Export services through `UtilsModule` in `src/utils/utils.module.ts`
+- Follow NestJS naming conventions: `*.service.ts`, `*.helper.ts`, `*.interceptor.ts`, `*.decorator.ts`
+
+### File Structure
+
+- Services: `src/utils/<service-name>/<service-name>.service.ts` or `*.helper.ts`
+- Interceptors: `src/utils/interceptors/<name>/<name>.interceptor.ts`
+- Decorators: `src/utils/decorators/<name>/<name>.decorator.ts`
+- Tests: Co-located `*.spec.ts` files next to implementation
+- DTOs: `*.dto.ts` files in the same directory as the service
+
+### Logging
+
+- Always inject Winston logger via `@Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger`
+- Use structured logging with appropriate log levels (error, warn, info, debug)
+- Log errors with context: `this.logger.error('message', error, { context: 'ClassName' })`
+- Include relevant metadata in log messages
+
+### Error Handling
+
+- Use NestJS `HttpException` for HTTP-related errors
+- Wrap external API calls with try-catch blocks
+- Use `@HandleError()` decorator for automatic error handling when appropriate
+- Provide meaningful error messages with context
+
+### Testing
+
+- Write unit tests for all services, helpers, and utilities
+- Use Jest as the testing framework
+- Mock external dependencies (AWS SDK, Redis, HTTP clients)
+- Test files should be named `*.spec.ts` and placed next to implementation
+- Aim for high test coverage (check with `npm run test:cov`)
+
+### AWS Services
+
+- Use AWS SDK v3 clients (`@aws-sdk/client-*`)
+- Inject AWS clients via constructor or create instances as needed
+- Handle AWS errors gracefully with proper error messages
+- Use environment variables for AWS configuration (AWS_REGION, etc.)
+- Access secrets via `SecretsService` using tuple keys like `('s3', 'documents_bucket')`
+
+### Redis
+
+- Use `RedisInstance` to create Redis clients
+- Use `RedisUtilHelper` or `RedisGenericHelper` for common operations
+- Handle connection errors and timeouts appropriately
+
+### HTTP/Axios
+
+- Use `AxiosHelper` for all HTTP requests
+- Include proper error handling and logging
+- Use `URLService` for URL generation and query string building
+- Set appropriate timeouts and headers
+
+### Decorators
+
+- Create reusable decorators in `src/decorators/`
+- Use `reflect-metadata` for metadata handling
+- Follow existing patterns: `@Public`, `@Request`, `@TransactionParams`, `@HandleError`, `@CacheTrack`
+
+### Interceptors
+
+- Create interceptors in `src/interceptors/`
+- Implement `NestInterceptor` interface
+- Use `Observable` from RxJS for async operations
+- Register interceptors in `UtilsModule` or export for app-level registration
+
+### Code Quality
+
+- Keep functions focused and single-purpose
+- Use meaningful variable and function names
+- Add JSDoc comments for public APIs
+- Export types and interfaces that consumers might need
+- Update `src/index.ts` to export new utilities
+
+### Environment Variables
+
+- Document required environment variables in README
+- Use `process.env` with fallbacks where appropriate
+- Access secrets via `SecretsService` rather than direct env access
+
+### Dependencies
+
+- Prefer NestJS built-in modules when possible
+- Use established libraries (axios, winston, dayjs, etc.)
+- Keep dependencies up-to-date and secure
+- Document any new dependencies in README
+
+### Build & Export
+
+- Ensure all exports are added to `src/index.ts`
+- Build must succeed: `npm run build`
+- Type definitions should be generated correctly
+- Follow semantic versioning for releases
+
+## When Adding New Features
+
+1. Create the service/helper in appropriate directory structure
+2. Write unit tests (`*.spec.ts`)
+3. Add to `UtilsModule` providers/exports if needed
+4. Export from `src/index.ts`
+5. Update README.md with usage examples
+6. Ensure build passes: `npm run build`
+7. Run tests: `npm test`
+
+## Common Patterns
+
+### Service Example
+
+```typescript
+import { Injectable, Inject, Logger } from '@nestjs/common';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+
+@Injectable()
+export class MyService {
+  @Inject(WINSTON_MODULE_PROVIDER)
+  private readonly logger: Logger;
+
+  async doSomething(): Promise<Result> {
+    try {
+      // implementation
+      this.logger.log('Operation successful', { context: 'MyService' });
+      return result;
+    } catch (error) {
+      this.logger.error('Operation failed', error, { context: 'MyService' });
+      throw error;
+    }
+  }
+}
+```
+
+### Helper Example
+
+```typescript
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class MyHelper {
+  helperMethod(param: string): string {
+    // implementation
+    return result;
+  }
+}
+```
+
+### Interceptor Example
+
+```typescript
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from '@nestjs/common';
+import { Observable } from 'rxjs';
+
+@Injectable()
+export class MyInterceptor implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    // implementation
+    return next.handle();
+  }
+}
+```
+
+## Notes
+
+- This is a library package, not an application - focus on reusable utilities
+- Maintain backward compatibility when possible
+- Follow existing code patterns and conventions
+- Keep utilities generic and configurable, not service-specific

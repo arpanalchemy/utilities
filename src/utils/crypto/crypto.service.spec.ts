@@ -108,7 +108,7 @@ describe('CryptoService', () => {
 
     it('should throw an error if the token is invalid', async () => {
       const invalidToken = 'invalid-token';
-      await expect(cryptoService.decrypt(invalidToken)).rejects.toThrowError();
+      await expect(cryptoService.decrypt(invalidToken)).rejects.toThrow();
     });
   });
 
@@ -122,7 +122,7 @@ describe('CryptoService', () => {
     cryptoService.generateSignature(stringToSign);
 
     // Check if the method has been called
-    expect(spy).toBeCalledWith(stringToSign);
+    expect(spy).toHaveBeenCalledWith(stringToSign);
 
     // Clean up the spy
     spy.mockRestore();

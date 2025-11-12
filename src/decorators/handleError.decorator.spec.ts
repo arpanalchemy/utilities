@@ -48,14 +48,12 @@ describe('HandleError Decorator', () => {
 
   it('should catch errors and throw default error', async () => {
     mockLogger();
-    await expect(testService.testMethod()).rejects.toThrowError(Error);
+    await expect(testService.testMethod()).rejects.toThrow(Error);
   });
 
   it('should catch errors and throw custom error', async () => {
     mockLogger();
-    await expect(testService.testErrorMethod()).rejects.toThrowError(
-      HttpException,
-    );
+    await expect(testService.testErrorMethod()).rejects.toThrow(HttpException);
   });
 
   it('should catch errors and supress it', async () => {

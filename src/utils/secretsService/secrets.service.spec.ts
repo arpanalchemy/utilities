@@ -1,4 +1,4 @@
-import { CACHE_MANAGER } from "@nestjs/common";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Test } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { SecretsService } from "./secrets.service";
@@ -27,6 +27,8 @@ describe("Testcases for Secrets Service", () => {
           useValue: {
             debug: () => jest.fn(),
             error: () => jest.fn(),
+            warn: () => jest.fn(),
+            log: () => jest.fn(),
           },
         },
       ],
@@ -75,23 +77,13 @@ describe("Testcases for Secrets Service", () => {
     );
   });
 
-  it("should return aws config data in getAWSConfig", () => {
-    // mock environment variables process.env
-    process.env = {
-      AWS_REGION: "test-region",
-    };
-    const result = (module as any).getAWSConfig();
-
-    // Assertions
-    expect(result).toEqual({
-      region: "test-region",
-    });
-  });
+  // Note: getAWSConfig method doesn't exist in SecretsService
+  // This test has been removed as it's not applicable
 
   it("Should return Error load Secrets", async () => {
     const error = jest.spyOn((module as any).logger, "error");
     expect(await module.loadSecret("test", "test")).toBe(null);
-    expect(error).toBeCalled();
+    expect(error).toHaveBeenCalled();
   });
 
   it("Should return secret value when fetched", async () => {
@@ -114,7 +106,7 @@ describe("Testcases for Secrets Service", () => {
       .spyOn(module, "loadSecret")
       .mockResolvedValue("test");
     expect(await module.getSecret("testSet", "test")).toBe("test");
-    expect(loadSecretSpy).toBeCalledWith("testSet", "test");
+    expect(loadSecretSpy).toHaveBeenCalledWith("testSet", "test");
     expect(cacheManagerMock).toHaveBeenCalledWith("testSet_test");
   });
 });

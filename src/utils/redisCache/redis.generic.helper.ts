@@ -87,7 +87,7 @@ export class RedisGenericHelper {
     });
     const instance = await this.instance.getClient();
     const payload = await instance.get(cacheKey);
-    if (!payload) {
+    if (!payload || typeof payload !== 'string') {
       this.logger.info('Nothing in Cache, cache miss');
       return;
     }
@@ -108,7 +108,7 @@ export class RedisGenericHelper {
 
       // Check if the key exists in cache
       let response = await instance.get(cacheKey);
-      if (!response) {
+      if (!response || typeof response !== 'string') {
         this.logger.info(
           `Cache not exists for the key, so creating new: ${cacheKey}`,
         );
@@ -156,7 +156,7 @@ export class RedisGenericHelper {
       last_Failed_at: new Date(),
     };
     let ttl = values.timeToExpire;
-    if (existingKey) {
+    if (existingKey && typeof existingKey === 'string') {
       let payload = JSON.parse(existingKey);
       let newCount = payload.count + 1;
       let status = payload.status;
@@ -183,6 +183,9 @@ export class RedisGenericHelper {
     let response = {};
     if (key) {
       const payload = await instance.get(`STATUS_API_${key}`);
+      if (!payload || typeof payload !== 'string') {
+        return response;
+      }
       let parsedPayload = JSON.parse(payload);
       response = {
         [`${key}`]: parsedPayload?.status ?? 'SUCCESS',
@@ -197,6 +200,9 @@ export class RedisGenericHelper {
       if (existingKey) {
         for (let redisKey of existingKey) {
           const payload = await instance.get(redisKey);
+          if (!payload || typeof payload !== 'string') {
+            continue;
+          }
           const parsedPayload = JSON.parse(payload);
           const statusKey = redisKey.replace('STATUS_API_', '');
           response[statusKey] = parsedPayload.status;
@@ -243,12 +249,12 @@ export class RedisGenericHelper {
 
       const response = await instance.get(cacheKey);
 
-      if (!response) {
+      if (!response || typeof response !== 'string') {
         this.logger.info(`No resposne found for the key: ${cacheKey}`);
         return null;
       }
 
-      return JSON.parse(response || '{}');
+      return JSON.parse(response);
     } catch (error) {
       this.logger.error(
         `Error while getting cache for the given key: ${cacheKey}.`,

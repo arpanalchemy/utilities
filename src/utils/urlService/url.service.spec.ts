@@ -51,7 +51,7 @@ describe('Test Cases for URLService', () => {
   });
 
   it('errorInResponse Should throw an Error', () => {
-    expect(() => module.errorInResponse()).toThrowError(
+    expect(() => module.errorInResponse()).toThrow(
       'Error in Internal Communication',
     );
   });

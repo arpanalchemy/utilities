@@ -15,7 +15,7 @@ import {
  */
 @Injectable()
 export class RedisInstance {
-  private client: RedisClientType<RedisModules, RedisFunctions, RedisScripts>;
+  private client: RedisClientType<RedisModules, RedisFunctions, RedisScripts> | null = null;
 
   private connection: boolean = false;
   private connErr: string;
@@ -45,9 +45,10 @@ export class RedisInstance {
    * @summary This method sets redis connection
    */
   private async connect(): Promise<void> {
-    this.client = createClient(
+    const client = createClient(
       await RedisHelper.getConnString(this.secretService)
-    );
+    ) as RedisClientType<RedisModules, RedisFunctions, RedisScripts>;
+    this.client = client;
     this.client.on("error", this.onError.bind(this));
     this.client.on("connect", this.onConnected.bind(this));
     await this.client.connect();

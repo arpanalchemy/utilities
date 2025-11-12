@@ -15,7 +15,7 @@ export class RedisUtilHelper {
     try {
       const instance = await this.instance.getClient();
       const payload = await instance.get(key);
-      if (!payload) {
+      if (!payload || typeof payload !== 'string') {
         this.logger.info('Nothing in Cache, route expired');
         return;
       }

@@ -51,8 +51,8 @@ describe("Running Test for Redis Helper to Get URL", () => {
 
   it("Should Throw an error if no value returned from secret", async () => {
     SecretServiceMockHelper.setExceptionMode();
-    expect(RedisHelper.getConnString(secretMock)).rejects.toThrowError(
-      `Couldn't fetch connection string from Secrets`
+    await expect(RedisHelper.getConnString(secretMock)).rejects.toThrow(
+      `Couldn't fetch connection string from Secrets`,
     );
   });
 

@@ -50,7 +50,7 @@ describe('Test Cases for Request Decorator', () => {
 
   it('UserData Must throw an error if userData doesnot exists', () => {
     const req = httpMock.createRequest({});
-    expect(() => factory('foo', ctx(req, res))).toThrowError(
+    expect(() => factory('foo', ctx(req, res))).toThrow(
       'No TerminalData found for this Controller',
     );
   });
@@ -112,7 +112,7 @@ describe('Test Cases for Request Decorator', () => {
 
   it('ConfigData Must throw an error if configData doesnot exists', () => {
     const req = httpMock.createRequest({});
-    expect(() => configDataFactory('foo', ctx(req, res))).toThrowError(
+    expect(() => configDataFactory('foo', ctx(req, res))).toThrow(
       'No ConfigData found for this Controller',
     );
   });
@@ -141,11 +141,11 @@ describe('Test Cases for Request Decorator', () => {
     let req = httpMock.createRequest({
       configData: {},
     });
-    expect(() => configFactory(null, ctx(req, res))).toThrowError(
+    expect(() => configFactory(null, ctx(req, res))).toThrow(
       'No Config Json found for this Controller',
     );
     req = httpMock.createRequest({});
-    expect(() => configFactory(null, ctx(req, res))).toThrowError(
+    expect(() => configFactory(null, ctx(req, res))).toThrow(
       'No Config Json found for this Controller',
     );
   });
@@ -179,7 +179,7 @@ describe('Test Cases for Request Decorator', () => {
 
   it('Subscription Must throw an error if config doesnot exists', () => {
     const req = httpMock.createRequest({});
-    expect(() => subscriptionFactory(null, ctx(req, res))).toThrowError(
+    expect(() => subscriptionFactory(null, ctx(req, res))).toThrow(
       'No SubscriptionData found for this Controller',
     );
   });

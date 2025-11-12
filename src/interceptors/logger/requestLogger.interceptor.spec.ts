@@ -68,7 +68,7 @@ describe('Request Logger Interseptor', () => {
           };
         },
       } as unknown as CallHandler<any>),
-    ).toThrowError());
+    ).toThrow());
 
   it('should log response using tap next', async () => {
     const next = {

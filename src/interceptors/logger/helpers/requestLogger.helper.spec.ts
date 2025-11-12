@@ -31,7 +31,7 @@ describe('RequestLoggerHelper', () => {
       body: '',
       query: '',
       params: '',
-    };
+    } as any;
     helper.logRequest(request);
     expect(logger.info).toHaveBeenCalledTimes(1);
   });

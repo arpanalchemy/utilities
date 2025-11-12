@@ -1,6 +1,7 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
-import { Inject, CACHE_MANAGER, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';

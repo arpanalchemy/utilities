@@ -7,7 +7,9 @@ import {
   DeleteObjectCommandInput,
   DeleteObjectCommandOutput,
   GetObjectCommand,
+  ObjectCannedACL,
   PutObjectCommand,
+  PutObjectCommandInput,
   PutObjectCommandOutput,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -77,10 +79,17 @@ export class S3Service {
     Key: string;
     Body?: Buffer;
     ContentType?: string;
-    ACL?: string;
+    ACL?: ObjectCannedACL | string;
   }): Promise<PutObjectCommandOutput> {
     const client = new S3Client(this.getAWSConfig());
-    const command = new PutObjectCommand(params);
+    const commandParams: PutObjectCommandInput = {
+      Bucket: params.Bucket,
+      Key: params.Key,
+      Body: params.Body,
+      ContentType: params.ContentType,
+      ...(params.ACL && { ACL: params.ACL as ObjectCannedACL }),
+    };
+    const command = new PutObjectCommand(commandParams);
     return client.send(command);
   }
 

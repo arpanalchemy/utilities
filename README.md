@@ -23,6 +23,8 @@ npm test
 npm run test:cov
 ```
 
+**Note:** When running `npm install`, you may see deprecation warnings for `q` and `stringify-package`. These are expected and harmless - they come from `standard-version` (a dev dependency) and do not affect production builds or functionality.
+
 ### Usage (NestJS)
 
 Most classes are Nest providers. Import `UtilsModule` to make commonly used providers available for DI.

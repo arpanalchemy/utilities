@@ -331,19 +331,51 @@ git push origin :refs/tags/<tag-name>  # Delete remote tag
 
 ## 🔐 Authentication
 
-Ensure your `.npmrc` file is configured:
+### Method 1: npm login (Interactive)
+
+```bash
+npm login
+```
+
+This will open a browser window for authentication. After successful login, you can publish.
+
+### Method 2: Using Access Token
+
+1. **Generate an npm access token:**
+   - Go to https://www.npmjs.com/settings/YOUR_USERNAME/tokens
+   - Click "Generate New Token"
+   - Choose "Automation" or "Publish" type
+   - Copy the token
+
+2. **Update `.npmrc` file:**
 
 ```bash
 registry=https://registry.npmjs.org/
 always-auth=true
-//registry.npmjs.org/:_authToken=${NPM_TOKEN}
+//registry.npmjs.org/:_authToken=YOUR_TOKEN_HERE
 ```
 
-Set your npm token:
+**OR** use environment variable:
 
 ```bash
 export NPM_TOKEN=your_npm_token_here
 ```
+
+3. **Verify authentication:**
+
+```bash
+npm whoami
+```
+
+This should display your npm username if authenticated correctly.
+
+### Troubleshooting Authentication
+
+- **401 Unauthorized**: Token expired or invalid - generate a new token
+- **404 Not Found**: Package doesn't exist or you don't have publish permissions
+- **403 Forbidden**: You don't have permission to publish this package
+
+**Note:** If you're publishing a scoped package (e.g., `@alchemy/utilities`), ensure `publishConfig.access` is set to `"public"` in `package.json`.
 
 ---
 

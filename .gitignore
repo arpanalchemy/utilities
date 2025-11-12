@@ -5,6 +5,11 @@
 package-lock.json
 yarn.lock
 
+env
+env.local
+.env
+.env.*
+
 # Logs
 logs
 *.log
@@ -37,3 +42,5 @@ package-lock.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+.npmrc

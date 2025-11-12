@@ -1,11 +1,11 @@
-## @alchemy/utilities
+## alchemy-utilities
 
 A collection of NestJS-friendly utilities and helpers used across Alchemy services. It bundles common integrations (AWS S3/SQS/EventBridge/Textract), HTTP helpers, Redis caching helpers, logging/interceptors, decorators, and misc utility services.
 
 ### Install
 
 ```bash
-npm install @alchemy/utilities
+npm install alchemy-utilities
 ```
 
 Requires Node 16+, NestJS 8+, and TypeScript.
@@ -29,7 +29,7 @@ Most classes are Nest providers. Import `UtilsModule` to make commonly used prov
 
 ```ts
 import { Module } from '@nestjs/common';
-import { UtilsModule, S3Service, AxiosHelper } from '@alchemy/utilities';
+import { UtilsModule, S3Service, AxiosHelper } from 'alchemy-utilities';
 
 @Module({
   imports: [UtilsModule],
@@ -153,7 +153,7 @@ WinstonModule.forRoot({
 ### Example: Using AxiosHelper + URLService
 
 ```ts
-import { AxiosHelper, URLService } from '@alchemy/utilities';
+import { AxiosHelper, URLService } from 'alchemy-utilities';
 
 export class ExampleService {
   constructor(
@@ -168,13 +168,152 @@ export class ExampleService {
     return this.http.getData(url);
   }
 }
+
+
+# alchemy-utilities
+
+A collection of NestJS-friendly utilities and helpers used across Alchemy services. It bundles common integrations (AWS S3/SQS/EventBridge/Textract), HTTP helpers, Redis caching helpers, logging/interceptors, decorators, and misc utility services.
+
+---
+
+## 📦 Install
+
+```bash
+npm install alchemy-utilities
 ```
 
-### Development
+Requires Node 16+, NestJS 8+, and TypeScript.
 
-- TypeScript config: `tsconfig.json` / `tsconfig.build.json`
-- Release: `npm run release` (CI-only guard via `release-script`)
+---
 
-### License
+## 🧰 Build & Test
+
+```bash
+# build (outputs to dist/)
+npm run build
+
+# run tests
+npm test
+
+# coverage
+npm run test:cov
+```
+
+---
+
+* Release:
+
+  ```bash
+  npm run release
+  ```
+
+---
+
+## 🚀 Versioning & Publishing
+
+### 🪶 Step 1: Set up authentication
+
+Make sure `.npmrc` exists with your token (see root directory):
+
+```bash
+registry=https://registry.npmjs.org/
+//registry.npmjs.org/:_authToken=${NPM_TOKEN}
+```
+
+Export your token (if not already):
+
+```bash
+export NPM_TOKEN=your_real_token_here
+```
+
+---
+
+### 🧩 Step 2: Prepare your branch
+
+```bash
+git checkout main
+git pull origin main
+npm install
+npm run build
+```
+
+---
+
+### 🧭 Step 3: Version bump
+
+Choose one depending on your change type:
+
+| Change Type  | Command                                                     | Description                           |
+| ------------ | ----------------------------------------------------------- | ------------------------------------- |
+| 🩹 **Patch** | `npm version patch -m "chore: bump patch version to %s"`    | Small fixes or internal tweaks        |
+| ✨ **Minor**  | `npm version minor -m "feat: bump minor version to %s"`     | Backward-compatible feature additions |
+| 💥 **Major** | `npm version major -m "breaking: bump major version to %s"` | Breaking API changes                  |
+
+
+---
+
+## 🚦 Semantic Versioning (SemVer) Explained
+
+Each npm package version follows this format:
+
+```
+MAJOR.MINOR.PATCH
+```
+
+| Part      | Example Change  | Meaning                                                                          |
+| --------- | --------------- | -------------------------------------------------------------------------------- |
+| **MAJOR** | `1.0.0 → 2.0.0` | 🔥 **Breaking changes** — incompatible API changes that may break existing usage |
+| **MINOR** | `1.0.0 → 1.1.0` | ✨ **New features** — backward-compatible functionality added                     |
+| **PATCH** | `1.0.0 → 1.0.1` | 🩹 **Bug fixes** — backward-compatible improvements or corrections               |
+
+---
+
+This will:
+
+* Update `package.json` version
+* Commit and tag the release automatically
+
+---
+
+### 🌐 Step 4: Push changes
+
+```bash
+git push origin main --tags
+```
+
+---
+
+### 📦 Step 5: Publish to npm
+
+To publish version **0.0.1** :
+
+```bash
+npm version 0.0.1
+npm publish
+```
+
+To publish later versions (after bumping):
+
+```bash
+npm publish
+```
+
+If you’re publishing to GitHub Packages, use:
+
+```bash
+npm publish --registry=https://npm.pkg.github.com/
+```
+
+---
+
+### ✅ Step 6: Verify
+
+```bash
+npm info alchemy-utilities version
+```
+
+---
+
+## 📄 License
 
 ISC
